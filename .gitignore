@@ -1,0 +1,9 @@
+# This repo holds only intended config; guard against accidental drops.
+*.log
+.DS_Store
+tmp/
+*.local.json
+
+# Never commit credentials/auth that might get copied in.
+auth.json
+.env
