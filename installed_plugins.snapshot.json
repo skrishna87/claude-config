@@ -1,0 +1,126 @@
+{
+  "version": 2,
+  "plugins": {
+    "code-review@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/home/you/.claude/plugins/cache/claude-plugins-official/code-review/unknown",
+        "version": "unknown",
+        "installedAt": "2025-12-19T19:57:23.781Z",
+        "lastUpdated": "2026-06-16T22:05:56.537Z"
+      }
+    ],
+    "frontend-design@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/home/you/.claude/plugins/cache/claude-plugins-official/frontend-design/unknown",
+        "version": "unknown",
+        "installedAt": "2025-12-19T19:57:53.478Z",
+        "lastUpdated": "2026-06-16T22:05:56.538Z"
+      }
+    ],
+    "gopls-lsp@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/home/you/.claude/plugins/cache/claude-plugins-official/gopls-lsp/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2025-12-19T19:58:14.336Z",
+        "lastUpdated": "2025-12-19T19:58:14.336Z"
+      }
+    ],
+    "feature-dev@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/home/you/.claude/plugins/cache/claude-plugins-official/feature-dev/unknown",
+        "version": "unknown",
+        "installedAt": "2025-12-19T19:58:47.145Z",
+        "lastUpdated": "2026-06-16T22:05:56.538Z"
+      }
+    ],
+    "security-guidance@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/home/you/.claude/plugins/cache/claude-plugins-official/security-guidance/2.0.6",
+        "version": "2.0.6",
+        "installedAt": "2025-12-19T20:00:10.364Z",
+        "lastUpdated": "2026-06-12T16:15:09.624Z"
+      }
+    ],
+    "sentry@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/home/you/.claude/plugins/cache/claude-plugins-official/sentry/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2025-12-19T20:00:45.560Z",
+        "lastUpdated": "2026-01-22T15:14:01.173Z",
+        "gitCommitSha": "215e5f1bf44a5a332da8fb3661980658b8db116c"
+      }
+    ],
+    "typescript-lsp@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/home/you/.claude/plugins/cache/claude-plugins-official/typescript-lsp/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2025-12-19T20:01:49.958Z",
+        "lastUpdated": "2025-12-19T20:01:49.958Z"
+      }
+    ],
+    "pr-review-toolkit@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/home/you/.claude/plugins/cache/claude-plugins-official/pr-review-toolkit/unknown",
+        "version": "unknown",
+        "installedAt": "2025-12-24T00:49:00.652Z",
+        "lastUpdated": "2026-06-16T22:05:56.537Z"
+      }
+    ],
+    "pyright-lsp@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/home/you/.claude/plugins/cache/claude-plugins-official/pyright-lsp/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2025-12-24T00:51:11.386Z",
+        "lastUpdated": "2025-12-24T00:51:11.386Z"
+      }
+    ],
+    "playwright@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/home/you/.claude/plugins/cache/claude-plugins-official/playwright/unknown",
+        "version": "unknown",
+        "installedAt": "2026-01-19T19:53:41.320Z",
+        "lastUpdated": "2026-06-16T22:05:56.536Z",
+        "gitCommitSha": "96276205880a60fd66bbae981f5ab568e70c4cbf"
+      }
+    ],
+    "code-simplifier@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/home/you/.claude/plugins/cache/claude-plugins-official/code-simplifier/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-01-19T19:55:16.643Z",
+        "lastUpdated": "2026-01-19T19:55:16.643Z",
+        "gitCommitSha": "96276205880a60fd66bbae981f5ab568e70c4cbf"
+      }
+    ],
+    "superpowers@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/home/you/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.0",
+        "version": "6.0.0",
+        "installedAt": "2026-05-26T22:32:57.672Z",
+        "lastUpdated": "2026-06-16T22:05:58.129Z",
+        "gitCommitSha": "f2cbfbefebbfef77321e4c9abc9e949826bea9d7"
+      }
+    ],
+    "mcp-server-dev@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/home/you/.claude/plugins/cache/claude-plugins-official/mcp-server-dev/unknown",
+        "version": "unknown",
+        "installedAt": "2026-05-26T22:36:03.957Z",
+        "lastUpdated": "2026-06-16T22:05:56.538Z"
+      }
+    ]
+  }
+}
