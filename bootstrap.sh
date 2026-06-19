@@ -18,13 +18,20 @@ link() { # link <repo-relative-src> <claude-relative-dest>
 }
 
 link commands/dev-loop.md       commands/dev-loop.md
+link commands/plan-feature.md   commands/plan-feature.md
 link commands/review-task.md    commands/review-task.md
 link rubrics/per-task-review.md rubrics/per-task-review.md
+link workflows/dev-loop.js      workflows/dev-loop.js
+link templates/plan.md          templates/plan.md
+link templates/progress.md      templates/progress.md
 
 echo
 echo "Done. This machine also needs:"
-echo "  - codex CLI on PATH + authed:   codex --version && codex login"
+echo "  - a Workflow-capable Claude Code (the Workflow tool) — runs the background orchestrator"
 echo "  - git (worktree-capable checkout for the projects you loop on)"
+echo "  - OPTIONAL: codex CLI on PATH + authed (codex --version && codex login)."
+echo "      The review gate hardens against codex being down: it preflights, and on failure"
+echo "      falls back to a divergent-persona Claude reviewer (coverage is flagged DEGRADED)."
 echo
 echo "Optional — re-create your plugin set from the tracked manifest:"
 echo "  see installed_plugins.snapshot.json and install via /plugin in Claude Code."
