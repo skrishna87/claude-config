@@ -105,9 +105,12 @@ orchestrator** with **dependency-DAG fan-out**, a **hardened dual-model review g
   that SHA (`git worktree add <path> <sha>`) and returns `{taskId, path}`; the worker is then
   briefed with that **absolute path** and operates only there (absolute paths for edits, `git -C
   <path>` for git) — `agent()` has no `cwd` param, so the worktree path must be explicit in the
-  brief, else the agent may drift back to the launcher worktree. (Open call to settle in T4:
-  confirm a non-`isolation` background agent may write into that worktree under the harness
-  isolation guard; if not, fall back to `isolation:'worktree'` + a verified `baseRef`.) Per task,
+  brief, else the agent may drift back to the launcher worktree. (RESOLVED by spike
+  `wf_144124d1`: a non-`isolation` agent CAN write into a manually `git worktree add`-ed
+  worktree — no guard block, shell + Write both work — and it bases directly on the given SHA.
+  Isolation worktrees instead base on `origin/<default>` but can still reach the unpushed
+  layer-base SHA via the shared object store. Decision: manual `git worktree add <path>
+  <layer-base-sha>` + absolute-path workers; no `isolation` fallback needed.) Per task,
   a `pipeline`: **implement** (worker in its worktree, briefed with only that slice + files +
   glossary + locked decisions) → **gate** (T2 on the task diff; ≤2 fix→review cycles) →
   **commit-in-worktree** on pass, writing the `Dev-Loop-Task: <task-id>` trailer — this
