@@ -587,11 +587,36 @@ function cleanupPrompt(repo, task, worktreePath) {
 
 const MAX_FIX_CYCLES = 2; // ≤2 fix→review cycles per the plan
 
+// ---------------------------------------------------------------------------------------
+// Per-stage model selection — "best model for the job", NOT all-inherited-Opus. Mechanical
+// stages (provision/commit/checkpoint/cleanup) run cheap; implement does the real work; the
+// GATE runs the strongest tier (Opus) — review is the highest-stakes reasoning in the loop, it
+// must out-think the implementer to catch what they missed, so it should never be the weaker
+// model reviewing a stronger model's output. Keyed by the agent's `phase`. The "opus" alias
+// resolves to the latest Opus (4.8), independent of the global session default.
+// Override any stage per launch via args.models, e.g. { gate: "sonnet", implement: "opus" }.
+// An unknown stage yields undefined → that agent inherits the session model.
+// ---------------------------------------------------------------------------------------
+const DEFAULT_STAGE_MODELS = {
+  provision: "haiku",
+  implement: "sonnet",
+  gate: "opus",
+  commit: "haiku",
+  integrate: "sonnet",
+  checkpoint: "haiku",
+  cleanup: "haiku",
+};
+function stageModel(phase, args) {
+  const over = args && args.models;
+  return (over && over[phase]) || DEFAULT_STAGE_MODELS[phase] || undefined;
+}
+
 async function provisionTask(args, task, layerBaseSha) {
   const res = await agent(provisionPrompt(args.repo, task, layerBaseSha), {
     schema: provisionSchema,
     label: `provision:${task.id}`,
     phase: "provision",
+    model: stageModel("provision", args),
   });
   if (!res || !res.ok) {
     return { ok: false, reason: `provision failed${res && res.error ? `: ${res.error}` : " (agent died)"}` };
@@ -605,7 +630,7 @@ async function implementAndGate(args, task, worktreePath) {
   // implement
   const impl = await agent(
     implementPrompt(task, worktreePath, args.glossary, args.lockedDecisions),
-    { schema: implementSchema, label: `implement:${task.id}`, phase: "implement" },
+    { schema: implementSchema, label: `implement:${task.id}`, phase: "implement", model: stageModel("implement", args) },
   );
   if (!impl || !impl.ok) {
     return { approved: false, reason: `implement failed${impl && impl.error ? `: ${impl.error}` : " (agent died)"}` };
@@ -616,6 +641,7 @@ async function implementAndGate(args, task, worktreePath) {
     schema: gateSchema,
     label: `gate:${task.id}:0`,
     phase: "gate",
+    model: stageModel("gate", args),
   });
   let coverage = gate ? gate.coverage : "UNKNOWN";
   let cycle = 0;
@@ -629,6 +655,7 @@ async function implementAndGate(args, task, worktreePath) {
       schema: implementSchema,
       label: `fix:${task.id}:${cycle}`,
       phase: "implement",
+      model: stageModel("implement", args),
     });
     if (!fix || !fix.ok) {
       return { approved: false, reason: `fix attempt ${cycle} failed${fix && fix.error ? `: ${fix.error}` : " (agent died)"}` };
@@ -637,6 +664,7 @@ async function implementAndGate(args, task, worktreePath) {
       schema: gateSchema,
       label: `gate:${task.id}:${cycle}`,
       phase: "gate",
+      model: stageModel("gate", args),
     });
     if (gate) coverage = gate.coverage;
   }
@@ -653,6 +681,7 @@ async function implementAndGate(args, task, worktreePath) {
     schema: commitSchema,
     label: `commit:${task.id}`,
     phase: "commit",
+    model: stageModel("commit", args),
   });
   if (!commit || !commit.ok) {
     return { approved: false, reason: `commit failed${commit && commit.error ? `: ${commit.error}` : " (agent died)"}`, coverage };
@@ -881,6 +910,7 @@ async function devLoop(args) {
           schema: cleanupSchema,
           label: `cleanup:${r.id}`,
           phase: "cleanup",
+          model: stageModel("cleanup", args),
         }),
       );
       // Cleanup is best-effort and never blocks progress, but a silently-skipped removal leaves a
@@ -905,7 +935,7 @@ async function devLoop(args) {
     }));
     const cp = await agent(
       checkpointPrompt(args, li, layers.length, statusRows, /*worktreeMap*/ {}, args.baseSha, featureHead),
-      { schema: checkpointSchema, label: `checkpoint:layer${li + 1}`, phase: "checkpoint" },
+      { schema: checkpointSchema, label: `checkpoint:layer${li + 1}`, phase: "checkpoint", model: stageModel("checkpoint", args) },
     );
     if (cp && cp.ok && cp.head) {
       featureHead = cp.head; // bookkeeping commit advances HEAD; the NEXT layer bases here
@@ -940,7 +970,7 @@ async function devLoop(args) {
 async function integrateOne(args, task, res, expectedFeatureHead) {
   return agent(
     integratePrompt(args.repo, args.featureBranch, task, res.worktreePath, res.commitSha, expectedFeatureHead),
-    { schema: integrateSchema, label: `integrate:${task.id}`, phase: "integrate" },
+    { schema: integrateSchema, label: `integrate:${task.id}`, phase: "integrate", model: stageModel("integrate", args) },
   );
 }
 
@@ -951,6 +981,7 @@ async function autoSerialize(args, task, res, newBaseHead) {
     schema: cleanupSchema, // reuse {ok, error}
     label: `rebase:${task.id}`,
     phase: "integrate",
+    model: stageModel("rebase", args),
   });
   if (!rebased || !rebased.ok) {
     return { approved: false, reason: `rebase failed${rebased && rebased.error ? `: ${rebased.error}` : " (agent died)"}` };
