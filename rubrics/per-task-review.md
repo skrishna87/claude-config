@@ -14,7 +14,13 @@ concise — every finding needs a `file:line` and a one-line fix.
 - **Convention fit** — deviates from this repo's / the plan's patterns (naming,
   structure, error handling, libraries). Read neighboring code before judging.
 - **Tests** — new logic without tests, or tests that don't actually exercise it.
-- **Scope creep** — changes unrelated to the task (flag, don't silently accept).
+- **Scope creep / write-set violation** — the diff must stay inside the task's **declared
+  write-set** (its `files` list in the plan's tasks DAG; a directory entry covers everything
+  beneath it). Touching any file outside that write-set — or a file belonging to another task's
+  slice — is scope creep: flag it, don't silently accept. This is load-bearing for safe fan-out:
+  parallel tasks assume disjoint write-sets, so an out-of-write-set edit can silently break a
+  concurrent task. Cite the offending `file:line` and which write-set it violates (out of THIS
+  task's set, and/or whose slice it belongs to).
 
 ## How to report
 Bucket every finding:
