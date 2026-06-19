@@ -19,7 +19,7 @@ for that reader, not for yourself.
   `api-rate-limit`). Confirm the slug with the user in your first message.
 - If `docs/<feature>/plan.md` already exists, STOP and ask whether to revise it — never silently
   overwrite a plan a loop may be mid-execution on.
-- Read `templates/plan.md` for the format contract you must emit. Do **not** start writing the
+- Read `~/.claude/templates/plan.md` for the format contract you must emit. Do **not** start writing the
   plan until the alignment gate (§1) is fully resolved.
 
 ## 1. Alignment gate (grill — one question at a time)
@@ -101,8 +101,8 @@ Write the file in the **exact shape of `templates/plan.md`** — same section or
    fenced/backtick content inside a value) so a stray start-of-line fence can't close the block early.
 6. `## Out of scope / deferred` — from §1.
 7. A horizontal rule, then the **`## Format contract` appendix copied verbatim from
-   `templates/plan.md`** (so the plan is self-describing for whoever consumes it). Copy it as-is;
-   do not paraphrase.
+   `~/.claude/templates/plan.md`** (so the plan is self-describing for whoever consumes it). Copy it
+   as-is; do not paraphrase.
 
 Optionally add a small "Layering that falls out" table (layer → width → tasks → why) showing the
 fan-out shape — useful, not required.

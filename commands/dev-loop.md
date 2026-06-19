@@ -54,7 +54,7 @@ git repo). This is the `git -C` target for every command below and the `repo` ar
 
 ## 2. Parse + VALIDATE the DAG (fail fast — invalid ⇒ STOP, do not launch)
 Parse the `tasks:` block from `docs/<feature>/plan.md` per the **Format contract** at the bottom
-of `templates/plan.md`. Apply it exactly; if anything below fails, STOP with a precise error
+of `~/.claude/templates/plan.md`. Apply it exactly; if anything below fails, STOP with a precise error
 (which task, which rule) and do **not** call the Workflow.
 
 - **Block discovery:** the first fenced code block after the first heading matching
@@ -95,12 +95,12 @@ of `templates/plan.md`. Apply it exactly; if anything below fails, STOP with a p
 - `done` = the set of ids so extracted.
 
 ## 4. Scaffold progress.md if missing
-If `docs/<feature>/progress.md` does not exist, create it from `templates/progress.md`: every
+If `docs/<feature>/progress.md` does not exist, create it from `~/.claude/templates/progress.md`: every
 task `pending`, the feature worktree path / branch / source, the Base sha, layer cursor
 `0/<total-layers>`, and `runId: none`. (The orchestrator rewrites it each checkpoint; you only
 seed it so a fresh session can resume.)
 
-## 5. Build `args` (EXACTLY the orchestrator's contract — see `workflows/dev-loop.js` head)
+## 5. Build `args` (EXACTLY the orchestrator's contract — see `~/.claude/workflows/dev-loop.js` head)
 Construct the object the Workflow expects. Required keys (the script throws on any missing/empty
 one): `repo`, `baseSha`, `planPath`, `progressPath`, `reviewGate`, `tasks`. Use **absolute**
 paths (agents get no cwd):
@@ -114,7 +114,7 @@ args = {
   progressPath:    "<abs path to docs/<feature>/progress.md>", // the cursor the checkpoint agent rewrites
   glossary:        "<verbatim 'Domain glossary' section text from plan.md>",   // briefed to every worker; omit ⇒ '(none provided)'
   lockedDecisions: "<verbatim 'Locked decisions' section text from plan.md>",  // briefed to every worker; omit ⇒ '(none provided)'
-  reviewGate:      "<the FULL VERBATIM TEXT of commands/review-task.md>",       // see note below
+  reviewGate:      "<the FULL VERBATIM TEXT of ~/.claude/commands/review-task.md>", // see note below
   tasks: [ { id, title, slice, files: ["..."], deps: ["..."], test }, ... ],   // every task, the T1 schema
   done:  ["T1", ...],   // ids from §3; the orchestrator excludes these from work
 };
@@ -129,10 +129,14 @@ args = {
   section texts from plan.md (so context-less workers share the same terms + locked choices).
 
 ## 6. Launch the Workflow (background)
-Call the **Workflow tool** with:
+Call the **Workflow tool** with the orchestrator's **absolute** path — resolve `~`/`$HOME` to the
+real home dir yourself, because the Workflow tool treats `scriptPath` as a literal path and does
+**not** expand `~`:
 ```
-Workflow({ scriptPath: "<abs path to workflows/dev-loop.js>", args })
+Workflow({ scriptPath: "<HOME>/.claude/workflows/dev-loop.js", args })   // e.g. /home/you/.claude/workflows/dev-loop.js
 ```
+`scriptPath` is the **bootstrap-symlinked** orchestrator (`$HOME/.claude/workflows/dev-loop.js`), the
+portable location — never a path relative to the project you're looping on, which has no copy of it.
 This is a **background** run (the orchestrator drives every task to done with no `/clear` pump).
 Tell the user it's launched and that you'll report when it completes. Do not re-implement,
 re-review, or commit anything yourself — the orchestrator owns all of that.
@@ -160,8 +164,8 @@ The run returns `{ approved: [...ids], blocked: [{id, reason}], finalHead, layer
 
 ## Notes
 - Thin launcher: per-task fan-out, the dual-model gate, commit-on-pass, integrate, and checkpoint
-  all live in `workflows/dev-loop.js`. Don't reimplement them here.
-- The locked review gate is `commands/review-task.md`, supplied to the orchestrator via
-  `args.reviewGate`. Do not pull in any other reviewer plugin/skill.
+  all live in `~/.claude/workflows/dev-loop.js`. Don't reimplement them here.
+- The locked review gate is `~/.claude/commands/review-task.md`, read verbatim and supplied to the
+  orchestrator via `args.reviewGate`. Do not pull in any other reviewer plugin/skill.
 - git is the source of truth for the done-set; progress.md owns the git-invisible cursor fields.
   Both are reconstructed every launch, so a `/clear` costs at most the work of one in-flight task.

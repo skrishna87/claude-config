@@ -1,72 +1,149 @@
-# claude-config — portable checkpoint-driven dev loop
+# claude-config — DAG-driven, checkpoint-driven dev loop
 
 My Claude Code workflow for long-running feature work, made clone-able across machines.
-The whole thing is built so a single feature can span many fresh sessions (`/clear`
-between them) **without ever relying on context compaction**.
+The whole thing is built so a single feature can be planned once, then driven to done by a
+**background orchestrator** that fans out independent work — and resumed across fresh sessions
+(`/clear` between them) **without ever relying on context compaction**.
 
-## The flow
+It is **self-contained**: no superpowers plugin, no skills it can't live without. `codex` is
+*optional* — the review gate hardens against it being down.
+
+## The pipeline
 
 ```
-brainstorm → spec/plan → save to docs/<feature>/{plan.md,progress.md}
-        │
-        ▼
-   /dev-loop <feature>        ◀── run at the start of every fresh session
-        │
-        ├─ orient from git + progress.md (not memory)
-        ├─ ensure isolated worktree + branch
-        ├─ pick next unchecked task
-        ├─ implement it  (subagent per task → main context stays lean)
-        ├─ REVIEW GATE   (/review-task: Claude self + codex, consolidated)
-        ├─ on pass: commit (provisional, in worktree) + tick checkbox + rewrite progress.md
-        └─ continue, or "checkpoint saved — /clear then /dev-loop <feature>"
-        │
-        ▼
-   all tasks done → you do final review / manual test → confirm
-        │
-        ▼
-   agent fast-forwards <branch> onto <source>  (+ push if you ask)
+  idea
+   │
+   ▼
+/plan-feature <idea>      ── grill the idea until every decision branch is locked, then
+   │                          emit docs/<feature>/plan.md: Locked decisions + Domain glossary
+   │                          + a machine-readable task DAG (deps + declared write-sets).
+   │                       You review the plan. Then:
+   ▼
+/dev-loop <feature>       ── a THIN launcher: orient from git (not memory), ensure the feature
+   │                          worktree, parse + VALIDATE the DAG, rebuild the done-set from
+   │                          commit trailers, then call the Workflow tool to run the
+   │                          background orchestrator (workflows/dev-loop.js). No per-task
+   │                          logic lives here.
+   ▼
+ orchestrator (background) ── walks the DAG layer by layer:
+   │
+   │   for each topological LAYER (width = # of file-disjoint tasks → the "1→2→1→3" fan-out):
+   │     ├─ provision a per-task worktree from the layer-base SHA   (current feature HEAD)
+   │     ├─ FAN OUT the disjoint tasks (conflicting ones run sequentially):
+   │     │     implement (fresh-context worker, only its slice + write-set + glossary)
+   │     │       → REVIEW GATE  (dual-lens; ≤2 fix→review cycles)
+   │     │       → commit-in-worktree with a `Dev-Loop-Task: <id>` trailer  (= approved)
+   │     ├─ INTEGRATE approved commits onto the feature branch, in order
+   │     │     (a surprise overlap ⇒ rebase the loser + re-run on the new base)
+   │     └─ CHECKPOINT: rewrite progress.md + a NO-trailer bookkeeping commit (tree clean)
+   ▼
+ all tasks approved → you do final review / manual test → confirm
+   │
+   ▼
+ agent fast-forwards <branch> onto <source>   (+ push only if you ask)
 ```
 
-### The invariant (why `/clear` is always safe)
+A failed task (gate block, dead agent, unresolvable conflict) is **skipped, not fatal**: only
+its dependents are pruned; independent branches keep moving. Blockers are reported at the end.
 
-At every task boundary:
+## The load-bearing ideas
+
+- **The DAG plan.** `/plan-feature` doesn't emit a checklist — it emits a graph. Each task
+  declares `deps` (what must be approved first) and `files` (its **write-set**). Topologically
+  sorting on `deps` gives **layers**; a layer's width is its fan-out. Choosing write-sets to be
+  disjoint within a layer is what *makes* the fan-out — that's why planning maximizes disjoint
+  width (the dogfood plan produced `3 → 2 → 1 → 1 → 1`).
+
+- **Disjoint-or-sequential fan-out.** Same-layer tasks run in parallel **only** if their
+  write-sets are provably disjoint (a lexical segment-prefix rule: dir `src/` overlaps
+  `src/foo.ts`; `src/foo` and `src/foobar` don't). Overlapping same-layer tasks aren't an error —
+  they just run **sequentially** so two agents never edit the same file at once.
+
+- **Per-task worktrees from the layer-base SHA.** Each task gets its own ephemeral git worktree
+  created from the **recorded layer-base SHA** (= the feature HEAD after the previous layer
+  integrated + checkpointed) via `git worktree add <path> <sha>`, so it inherits every prior
+  layer's commits — *including unpushed ones*. (We do **not** use the Workflow `isolation:'worktree'`
+  default, whose `fresh`/`head` base ref would branch from `origin/<default>` and drop those
+  unpushed dependency commits.) Workers operate with absolute paths + `git -C`; the script itself
+  has no fs/git — **every** side effect runs through a dispatched agent.
+
+- **The hardened dual-lens gate.** Two complementary lenses judge the same diff by the same
+  rubric: Lens A = a Claude rubric-correctness review; Lens B = an **adversarial** lens that is
+  the **codex (cross-model / GPT)** reviewer when codex is healthy, **else** a divergent-persona
+  ("hostile implementer/parser") Claude reviewer. codex is **preflighted once** (auth/health probe
+  with a hard timeout), runs with **backoff retries + per-attempt timeout + a unique output path**,
+  and on any failure the gate **falls back** so two-lens coverage is always restored. The verdict's
+  `Coverage:` line **always** states CROSS-MODEL vs DEGRADED — the degrade is loud, never hidden.
+
+- **Trailer-based done-set (the resumable invariant).** An approved task = a feature-branch commit
+  carrying exactly one `Dev-Loop-Task: <id>` **git trailer**. Checkpoints are **no-trailer**
+  bookkeeping commits. The done-set is reconstructed from the **trailer block only**
+  (`git log <base>..HEAD --format='%(trailers:key=Dev-Loop-Task,valueonly)'`), each commit verified
+  to descend from the recorded base SHA, duplicate trailers rejected. So git is authoritative for
+  *what's done*; `progress.md` holds only the git-invisible cursor fields (Base sha, layer cursor,
+  worktree map, runId).
+
+- **Resume = relaunch a fresh Workflow.** Recovery after `/clear` **always** reconstructs the
+  remaining DAG from git trailers + progress.md and launches a brand-new Workflow run. The Workflow
+  `resumeFromRunId` is a **same-session-only** optimization — a persisted `runId` is *ignored*
+  across sessions. So a `/clear` costs at most one in-flight task.
+
+- **Self-contained / zero superpowers.** Both commands spell out their rituals inline (alignment
+  grilling, planning, the gate) — no plugin/skill dependency — so the loop stays portable.
+
+## The invariant (why `/clear` is always safe)
+
+At every layer boundary:
 
 | Artifact | Meaning |
 |---|---|
-| feature-branch **commits** | approved tasks (each passed the review gate) |
-| **working tree** | the current task in flight (or clean) |
-| `docs/<feature>/progress.md` | the cursor — done / next / gotchas / how to resume |
+| feature-branch commit with a `Dev-Loop-Task: <id>` trailer | an approved task (passed the gate) |
+| per-task worktree under `<repo>/.dev-loop/worktrees/` | a task in flight |
+| feature-branch **no-trailer** commit | a bookkeeping checkpoint (progress.md rewrite) |
+| `docs/<feature>/progress.md` | the durable cursor — Base sha / layer cursor / worktree map / runId |
 
-Checkpoint **after every task** (cheap). `/clear` only **occasionally** (it's the one
-expensive thing). A clear costs at most one in-flight task.
+The orchestrator maintains this; a fresh `/dev-loop` only reconstructs from it. A `/clear` costs
+at most the work of one in-flight task.
 
 ## What's here
 
 | Path | Role |
 |---|---|
-| `commands/dev-loop.md` | `/dev-loop` — the resumable orchestrator |
-| `commands/review-task.md` | `/review-task` — the locked dual-model review gate |
-| `rubrics/per-task-review.md` | shared rubric fed verbatim to BOTH reviewers |
-| `templates/{plan,progress}.md` | starting points for `docs/<feature>/` |
-| `bootstrap.sh` | symlinks the above into `~/.claude` (idempotent, per-file) |
+| `commands/plan-feature.md` | `/plan-feature` — self-contained alignment grilling + emits the DAG `plan.md` |
+| `commands/dev-loop.md` | `/dev-loop` — thin launcher: validate the DAG, then call the Workflow |
+| `workflows/dev-loop.js` | the background **orchestrator**: layer fan-out, gate, commit, integrate, checkpoint |
+| `commands/review-task.md` | `/review-task` — the locked **dual-lens** review gate (Claude + codex/fallback) |
+| `rubrics/per-task-review.md` | shared rubric fed verbatim to BOTH lenses (incl. the write-set / scope-creep rule) |
+| `templates/plan.md` | the plan format + the **Format contract** appendix (block-discovery, schema, disjointness, trailer) |
+| `templates/progress.md` | the resume-cursor format for `docs/<feature>/progress.md` |
+| `bootstrap.sh` | symlinks all of the above into `~/.claude` (idempotent, per-file) |
 
-## The review gate
+Cross-file references inside the commands point at the **bootstrap-symlinked `~/.claude/...`**
+locations (the commands run from *your* project, not this repo) — e.g. the launcher's Workflow
+`scriptPath` is `~/.claude/workflows/dev-loop.js` and it reads the gate from
+`~/.claude/commands/review-task.md`.
 
-Two independent reviewers judge the **same diff** by the **same rubric**, then results are
+## The review gate (detail)
+
+Two **complementary lenses** judge the **same diff** by the **same rubric**, then results are
 consolidated (disagreements get investigated, not averaged):
 
-- **Reviewer A — Claude (self):** a dispatched subagent.
-- **Reviewer B — codex (cross-model / GPT):**
-  ```bash
-  codex exec -C "$REPO" -s read-only -o /tmp/codex-review.md \
-    "$(cat ~/.claude/rubrics/per-task-review.md)
-     Run 'git diff' to see the UNCOMMITTED changes and review ONLY those."
-  ```
-  `-C "$REPO"` points codex at the actual git sub-repo — **never the mono root**
-  (`/home/you/projects` isn't a git repo; running codex there is the "no git initiated"
-  failure). `-s read-only` lets it read surrounding code without writing.
+- **Lens A — rubric-correctness:** a Claude self-review against `~/.claude/rubrics/per-task-review.md`.
+- **Lens B — adversarial cross-model:** the **codex** (GPT) reviewer when it's healthy, **else** a
+  divergent-persona ("hostile implementer / hostile parser") Claude reviewer. An adversarial pass
+  is in **every** gate — dogfooding caught a spec the plain rubric reviewer PASSED but the
+  hostile-parser lens correctly FAILED for machine-ambiguity.
 
-This is deliberately **locked** — the loop ignores other reviewer plugins
+  ```bash
+  # codex is preflighted once, then run with a hard timeout + unique output path + backoff:
+  codex exec -C "$REPO" -s read-only -o "/tmp/dev-loop/${RUN}-${TASK}-${attempt}.md" \
+    "$(cat ~/.claude/rubrics/per-task-review.md) ...ADVERSARIAL LENS... review ONLY 'git diff'."
+  ```
+  `-C "$REPO"` points codex at the actual git sub-repo / worktree — **never the mono root**
+  (a non-git dir is the "no git initiated" failure). `-s read-only` lets it read surrounding code
+  without writing.
+
+This gate is deliberately **locked** — the loop ignores other reviewer plugins
 (pr-review-toolkit, feature-dev:code-reviewer, `/code-review`, …) so per-task results are
 reproducible. Those stay available for ad-hoc deep dives outside the loop.
 
@@ -77,23 +154,25 @@ git clone <this-repo> ~/projects/claude-config
 ~/projects/claude-config/bootstrap.sh
 ```
 
-Then ensure the external deps:
-- **codex CLI** on PATH and authed: `codex --version && codex login`
-- **git** with worktree support
+`bootstrap.sh` makes per-file symlinks into `~/.claude` (commands, the workflow, templates,
+rubric), so your other commands, skills, and plugins are untouched. Then ensure the deps:
 
-`bootstrap.sh` makes per-file symlinks into `~/.claude`, so your other commands, skills,
-and plugins are untouched. To track those too later, add them to this repo and extend
-`bootstrap.sh`.
+- **A Workflow-capable Claude Code** (the Workflow tool) — **required**; it runs the background
+  orchestrator.
+- **git** with worktree support — **required**.
+- **codex CLI** on PATH and authed (`codex --version && codex login`) — **optional**. Without it,
+  the gate falls back to a divergent-persona Claude reviewer and flags coverage as DEGRADED.
 
 ### Plugins
-Claude plugins are installed via the marketplace, not committed here. A snapshot of the
-current set lives in `installed_plugins.snapshot.json`; re-install via `/plugin` in Claude
-Code on a new machine.
+Claude plugins are installed via the marketplace, not committed here. A snapshot of the current
+set lives in `installed_plugins.snapshot.json`; re-install via `/plugin` in Claude Code on a new
+machine.
 
 ## Conventions this assumes
-- **Mono-style repos** (a root holding independent git sub-repos): work is gated behind a
-  worktree under `.worktrees/<repo>/<branch>` at the mono root.
-- **Per-task commits** accumulate on the feature branch; you review the whole branch at the
-  end, then the agent fast-forwards onto source.
-- **Plan = checklist.** Progress = a self-contained resume cursor. Conversation memory is
-  never the source of truth.
+- **Mono-style repos** (a root holding independent git sub-repos): `$REPO` is the actual sub-repo /
+  feature worktree that holds a `.git`, **never the mono root** (which isn't a git repo).
+- **Per-task commits** (each carrying a `Dev-Loop-Task` trailer) accumulate on the feature branch;
+  you review the whole branch at the end, then the agent fast-forwards onto source **only on your
+  explicit confirmation**.
+- **Plan = the DAG.** plan.md has no checkboxes — live status lives in `progress.md` + git
+  trailers. Conversation memory is never the source of truth.

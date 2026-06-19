@@ -7,3 +7,6 @@ tmp/
 # Never commit credentials/auth that might get copied in.
 auth.json
 .env
+
+# Per-task worktree root the orchestrator creates under each feature repo (never commit it).
+.dev-loop/
