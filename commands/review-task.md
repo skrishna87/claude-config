@@ -40,10 +40,18 @@ inherits it. Never run a gate with two identical generic lenses.
   the environment when you have one.
 
 ## 3. codex preflight (once per run)
-Probe ONCE — never retry-storm a dead binary:
+
+> **FEATURE FLAG — `CODEX_ENABLED` (default `0` = OFF).** Cross-model codex review is
+> **disabled for now**: it's been unreliable in this environment (multi-minute hangs, `bwrap`
+> sandbox-init failures), so the gate relies on **same-class adversarial review** — Lens A
+> (rubric Claude) + Lens B (divergent-persona hostile Claude, §5). That is a deliberate
+> posture, **not** a degrade. Flip `CODEX_ENABLED=1` below to restore true cross-model coverage.
+
+Probe ONCE — never retry-storm a dead binary (skipped entirely when the flag is off):
 ```bash
+CODEX_ENABLED=0   # FEATURE FLAG: 0=off (Claude-only adversarial), 1=on (codex cross-model)
 codex_up=0
-if command -v codex >/dev/null 2>&1; then
+if [ "$CODEX_ENABLED" = 1 ] && command -v codex >/dev/null 2>&1; then
   # fast auth/health probe with a hard timeout; trivial prompt, read-only
   if timeout -k 10 30 codex exec -s read-only --skip-git-repo-check \
        "reply with the single word: OK" >/dev/null 2>&1; then
@@ -52,8 +60,8 @@ if command -v codex >/dev/null 2>&1; then
 fi
 ```
 - `codex_up=1` → Lens B = real cross-model codex (§4).
-- `codex_up=0` (absent, unauthed, or probe timed/errored) → **skip straight to the Claude
-  fallback** (§5). Do NOT attempt the codex review loop.
+- `codex_up=0` (flag OFF, or codex absent/unauthed/timed/errored) → **skip straight to the
+  Lens B Claude reviewer** (§5). Do NOT attempt the codex review loop.
 
 ## 4. Run the lenses (in parallel)
 **Lens A — Claude rubric-correctness (always):** dispatch a `general-purpose` subagent with
@@ -94,7 +102,7 @@ rm -f /tmp/dev-loop/${RUN}-${TASK}-*.md   # cleanup; NEVER reuse a shared /tmp f
   failed → **fall to §5** so dual coverage is restored. Never proceed Lens-A-only without the
   fallback, and never count an empty codex run as cross-model coverage.
 
-## 5. Fallback — divergent-persona Claude (when codex is down or failed)
+## 5. Lens B — divergent-persona Claude (when codex is OFF by flag, down, or failed)
 Dispatch a SECOND, fresh `general-purpose` subagent — **distinct from Lens A** — as Lens B.
 Same rubric verbatim, PLUS this persona so it genuinely diverges instead of echoing Lens A:
 > You are a **hostile implementer / hostile parser**. Read every line assuming the worst
@@ -114,13 +122,16 @@ This restores two-lens coverage, but it is **Claude-only (no cross-model signal)
 
 ## 7. Verdict
 Emit a compact block. The **Coverage** line is mandatory — it ALWAYS states whether true
-cross-model (codex/GPT) coverage held or degraded to Claude-only. Never silently drop a lens.
+cross-model (codex/GPT) coverage held, was **deliberately disabled** by the `CODEX_ENABLED`
+flag (report **SINGLE-MODEL**, not a failure), or **degraded** to Claude-only via a codex
+failure. Never silently drop a lens.
 ```
 REVIEW: <feature> / <task>
-  Coverage: CROSS-MODEL (Claude + codex/GPT) | DEGRADED — Claude-only (codex <absent|unauthed|timeout|errored>)
+  Coverage: CROSS-MODEL (Claude + codex/GPT) | SINGLE-MODEL — Claude dual-lens (codex OFF by flag) | DEGRADED — Claude-only (codex <absent|unauthed|timeout|errored>)
   Lens A (rubric): <Crit/Imp/Min>   Lens B (adversarial): <Crit/Imp/Min>
   Blocking: <Critical+Important findings with file:line, or "none">
   VERDICT: PASS | FAIL
 ```
 **PASS** = zero unresolved Critical or Important. Minor issues are noted, not blocking.
-A DEGRADED run can still PASS — but the degrade is stated loudly, never hidden.
+A DEGRADED run can still PASS — but the degrade is stated loudly, never hidden. A SINGLE-MODEL
+run (codex OFF by flag) is the current default posture, not a degrade — report it plainly.

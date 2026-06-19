@@ -314,7 +314,7 @@ const gateSchema = {
   properties: {
     taskId: { type: "string" },
     pass: { type: "boolean" }, // VERDICT: PASS => true
-    coverage: { type: "string" }, // "CROSS-MODEL" | "DEGRADED" (review-task.md §7)
+    coverage: { type: "string" }, // "CROSS-MODEL" | "SINGLE-MODEL" (codex OFF by flag) | "DEGRADED" (review-task.md §7)
     blocking: { type: "array", items: { type: "string" } }, // Critical+Important findings
     notes: { type: "string" },
   },
@@ -455,7 +455,8 @@ function gatePrompt(task, worktreePath, reviewGate) {
     reviewGate,
     ``,
     `Return: taskId="${task.id}", pass (true iff final VERDICT is PASS = zero unresolved`,
-    `Critical/Important), coverage ("CROSS-MODEL" or "DEGRADED"), blocking (the list of`,
+    `Critical/Important), coverage (per review-task.md §7: "CROSS-MODEL", or "SINGLE-MODEL"`,
+    `when codex is OFF by flag, or "DEGRADED" on a codex failure), blocking (the list of`,
     `Critical+Important findings as "file:line — problem", empty if none), and notes.`,
   ].join("\n");
 }
@@ -569,10 +570,15 @@ function checkpointPrompt(args, layerIndex, totalLayers, statusRows, worktreeMap
 
 function cleanupPrompt(repo, task, worktreePath) {
   return [
-    `You are the CLEANUP agent for dev-loop task ${task.id}. Remove its ephemeral worktree.`,
+    `You are the CLEANUP agent for dev-loop task ${task.id}. Remove its ephemeral worktree and,`,
+    `if they are now empty, the shared scaffolding dirs (so no empty .dev-loop/worktrees/ is left`,
+    `behind after the run).`,
     `Run:`,
     `  git -C "${repo}" worktree remove --force "${worktreePath}"`,
     `  git -C "${repo}" worktree prune`,
+    `  rmdir --ignore-fail-on-non-empty "${repo}/.dev-loop/worktrees" "${repo}/.dev-loop" 2>/dev/null || true`,
+    `The rmdir removes those parent dirs ONLY while empty (a no-op if other tasks' worktrees`,
+    `remain, or if the dirs are already gone), so it is safe under concurrent per-task cleanup.`,
     `Return ok=true on success, else ok=false + error. Removing an already-gone worktree is`,
     `success (idempotent cleanup).`,
   ].join("\n");
@@ -611,6 +617,18 @@ function stageModel(phase, args) {
   return (over && over[phase]) || DEFAULT_STAGE_MODELS[phase] || undefined;
 }
 
+// Build an operator-facing failure reason from a structured agent result. Distinguishes a
+// genuinely-dead agent (null) from a graceful ok:false that explains itself via `error` (a hard
+// failure) or `summary` (e.g. an unsatisfiable task the agent correctly REFUSED to force rather
+// than commit scope creep). Without this, a clean ok:false carrying only a `summary` was
+// mislabeled "(agent died)" — sending operators to chase a phantom crash. (Found by matrix Run A.)
+function failReason(prefix, res) {
+  if (!res) return `${prefix} (agent died — null result)`;
+  if (res.error) return `${prefix}: ${res.error}`;
+  if (res.summary) return `${prefix}: ${res.summary}`;
+  return `${prefix} (returned ok:false, no detail)`;
+}
+
 async function provisionTask(args, task, layerBaseSha) {
   const res = await agent(provisionPrompt(args.repo, task, layerBaseSha), {
     schema: provisionSchema,
@@ -633,7 +651,7 @@ async function implementAndGate(args, task, worktreePath) {
     { schema: implementSchema, label: `implement:${task.id}`, phase: "implement", model: stageModel("implement", args) },
   );
   if (!impl || !impl.ok) {
-    return { approved: false, reason: `implement failed${impl && impl.error ? `: ${impl.error}` : " (agent died)"}` };
+    return { approved: false, reason: failReason("implement failed", impl) };
   }
 
   // gate, with up to MAX_FIX_CYCLES fix→review iterations
@@ -658,7 +676,7 @@ async function implementAndGate(args, task, worktreePath) {
       model: stageModel("implement", args),
     });
     if (!fix || !fix.ok) {
-      return { approved: false, reason: `fix attempt ${cycle} failed${fix && fix.error ? `: ${fix.error}` : " (agent died)"}` };
+      return { approved: false, reason: failReason(`fix attempt ${cycle} failed`, fix) };
     }
     gate = await agent(gatePrompt(task, worktreePath, args.reviewGate), {
       schema: gateSchema,
