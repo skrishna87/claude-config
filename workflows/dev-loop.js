@@ -37,9 +37,7 @@
 export const meta = {
   name: "dev-loop",
   description:
-    "DAG-driven orchestrator: fan out file-disjoint tasks per layer, gate each with the " +
-    "locked dual-model review, commit with a Dev-Loop-Task trailer, integrate, checkpoint. " +
-    "All side effects run through dispatched agents; this script is pure control-flow.",
+    "DAG-driven orchestrator: fan out file-disjoint tasks per layer, gate each with the locked dual-model review, commit with a Dev-Loop-Task trailer, integrate, checkpoint. All side effects run through dispatched agents; this script is pure control-flow.",
   phases: [
     "validate",
     "orchestrate", // umbrella; each layer also opens its own phase below
@@ -665,7 +663,7 @@ async function implementAndGate(args, task, worktreePath) {
 // =======================================================================================
 // SECTION 6 — The orchestrator entry point
 // =======================================================================================
-export default async function devLoop() {
+async function devLoop(args) {
   // ---- Phase: validate (defensive, fail-fast, BEFORE any side effect) ----
   phase("validate");
   if (args === undefined || args === null || typeof args !== "object") {
@@ -960,3 +958,18 @@ async function autoSerialize(args, task, res, newBaseHead) {
   // Re-run implement -> gate -> commit on the now-current base, in the SAME worktree.
   return implementAndGate(args, task, res.worktreePath);
 }
+
+// =======================================================================================
+// Workflow ENTRY: the runtime executes the top-level body and captures its return value.
+// A Workflow script is NOT a standalone ES module — it uses top-level await + return, so
+// `node --check` will report "return outside of function". That is EXPECTED; the runtime
+// wraps this body in an async function. Do not "fix" it back into `export default`.
+// =======================================================================================
+// The runtime exposes the launch input as the global `args`. Be robust: some paths deliver
+// it as a JSON string — coerce to an object before handing it to the orchestrator.
+let __args = typeof args === "undefined" ? undefined : args;
+if (typeof __args === "string") {
+  try { __args = JSON.parse(__args); }
+  catch (e) { throw new Error("Workflow args arrived as a non-JSON string: " + e.message); }
+}
+return await devLoop(__args);
