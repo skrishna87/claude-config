@@ -14,6 +14,13 @@ concise — every finding needs a `file:line` and a one-line fix.
 - **Convention fit** — deviates from this repo's / the plan's patterns (naming,
   structure, error handling, libraries). Read neighboring code before judging.
 - **Tests** — new logic without tests, or tests that don't actually exercise it.
+- **Over-engineering / leanness** — within what THIS slice was asked to build, flag gratuitous
+  complexity: reinvented stdlib/native platform feature, a new dependency an installed one or the
+  platform already covers, an abstraction with a single implementation (YAGNI), or boilerplate
+  nobody asked for. Report as **Minor** unless it adds real risk surface (then Important). SCOPE
+  GUARD: judge only *how* the slice was built — never "should this task exist" (that re-litigates
+  the plan's Locked decisions), and never flag a required test or a validation / error-handling /
+  security check as bloat.
 - **Scope creep / write-set violation** — the diff must stay inside the task's **declared
   write-set** (its `files` list in the plan's tasks DAG; a directory entry covers everything
   beneath it). Touching any file outside that write-set — or a file belonging to another task's

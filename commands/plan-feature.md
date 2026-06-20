@@ -86,6 +86,16 @@ Path rules for `files` (enforced by the parser — get them right or the launche
 Prefer the narrowest write-set that still makes the slice self-contained (a task that declares a
 whole dir `src/` blocks every other task touching anything under `src/` from sharing its layer).
 
+**Design the leanest DAG that satisfies the Locked decisions.** Architectural over-engineering is
+invisible to the per-diff review gate — by the time a worker implements a slice, the fact that the
+slice exists and has its shape is already locked. So prune it *here*: prefer the fewest tasks and
+abstractions that meet §1's locked decisions; don't introduce a cross-task seam, layer, or
+generalization "for extensibility" without a **named second consumer** or an explicit request.
+Every abstraction or shared seam you introduce carries a one-line justification in its `slice` — a
+named second consumer, or a locked-decision reference. One with neither is YAGNI: inline it,
+collapse the tasks. (This governs structure *you* invent — never a capability the Locked decisions
+mandate.)
+
 ## 4. Emit `docs/<feature>/plan.md`
 Write the file in the **exact shape of `templates/plan.md`** — same section order and headings:
 
