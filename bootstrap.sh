@@ -19,6 +19,7 @@ link() { # link <repo-relative-src> <claude-relative-dest>
 
 link commands/dev-loop.md       commands/dev-loop.md
 link commands/plan-feature.md   commands/plan-feature.md
+link commands/phase-translate.md commands/phase-translate.md
 link commands/review-task.md    commands/review-task.md
 link rubrics/per-task-review.md rubrics/per-task-review.md
 link workflows/dev-loop.js      workflows/dev-loop.js
