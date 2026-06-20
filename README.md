@@ -54,6 +54,14 @@ its dependents are pruned; independent branches keep moving. Blockers are report
   disjoint within a layer is what *makes* the fan-out — that's why planning maximizes disjoint
   width (the dogfood plan produced `3 → 2 → 1 → 1 → 1`).
 
+- **The plan is grounded before it runs.** `/dev-loop` §3.5 greps every *remaining* task's slice
+  against the real code before fan-out: a referenced symbol that exists nowhere (a phantom API like
+  `CurrentRevision` for the real `GetWithRevision`), an edit-target path outside the declared
+  write-set, or an "everywhere" invariant with no enumerated call sites ⇒ **STOP, don't launch**.
+  Each of these otherwise surfaces only *after* a full implement→review cycle and forces a relaunch
+  — catching it at launch is ~10× cheaper. `/phase-translate` bakes the same three checks into plan
+  authorship, so a plan born from a higher-level spec passes the pre-flight first try.
+
 - **Disjoint-or-sequential fan-out.** Same-layer tasks run in parallel **only** if their
   write-sets are provably disjoint (a lexical segment-prefix rule: dir `src/` overlaps
   `src/foo.ts`; `src/foo` and `src/foobar` don't). Overlapping same-layer tasks aren't an error —
@@ -110,7 +118,8 @@ at most the work of one in-flight task.
 | Path | Role |
 |---|---|
 | `commands/plan-feature.md` | `/plan-feature` — self-contained alignment grilling + emits the DAG `plan.md` |
-| `commands/dev-loop.md` | `/dev-loop` — thin launcher: validate the DAG, then call the Workflow |
+| `commands/phase-translate.md` | `/phase-translate` — translate ONE phase of a higher-level spec into a **grounded** DAG `plan.md` (symbols/write-sets/invariants verified against landed code) |
+| `commands/dev-loop.md` | `/dev-loop` — thin launcher: validate the DAG (incl. §3.5 semantic pre-flight), then call the Workflow |
 | `workflows/dev-loop.js` | the background **orchestrator**: layer fan-out, gate, commit, integrate, checkpoint |
 | `commands/review-task.md` | `/review-task` — the locked **dual-lens** review gate (Claude + codex/fallback) |
 | `rubrics/per-task-review.md` | shared rubric fed verbatim to BOTH lenses (incl. the write-set / scope-creep rule) |

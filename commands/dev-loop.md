@@ -19,7 +19,8 @@ reconstructs from it):
 - **`docs/<feature>/progress.md`** = the durable cursor (Base sha, layer cursor, worktree map, runId)
 
 **Prereq:** a plan exists at `docs/<feature>/plan.md` in the `templates/plan.md` format (written
-FIRST via `/plan-feature`). Its fenced `tasks:` block is the machine-readable source of truth.
+FIRST via `/plan-feature`, or — when translating an existing higher-level spec into the v2 DAG —
+via `/phase-translate`). Its fenced `tasks:` block is the machine-readable source of truth.
 
 > **Calling the Workflow tool below IS the explicit opt-in to run a background workflow.** That is
 > the whole job of this command — do it once the DAG validates, not before.
@@ -93,6 +94,46 @@ of `~/.claude/templates/plan.md`. Apply it exactly; if anything below fails, STO
 - **Reject duplicate trailers** (the same id on two commits is a contract error → STOP).
 - **Ignore non-trailer bookkeeping commits** (checkpoints carry no `Dev-Loop-Task`).
 - `done` = the set of ids so extracted.
+
+## 3.5 Ground the remaining tasks against the code (semantic pre-flight — phantom ⇒ STOP)
+§2 proves the DAG is structurally valid; this proves each **not-yet-done** task is *grounded in the
+real code* before the expensive fan-out. Run it **only over tasks NOT in the §3 done-set** —
+already-approved tasks passed the gate, and re-grounding loose prose against landed code yields
+false stops. You have a filesystem and `git -C "$REPO" grep`; the orchestrator does not, so this is
+the launcher's job. Any failure below ⇒ **STOP** with a precise error (task id + the symbol/path)
+and do **not** launch; the plan author fixes that slice, then re-run `/dev-loop`.
+
+These three checks are the exact defect classes that otherwise surface only *after* a full
+implement→review cycle and force a relaunch (each catch here is ~10× cheaper than at the gate):
+
+- **(a) Symbol grounding — no phantom APIs.** For each remaining task, take every production symbol
+  its `slice` names as something it CALLS or IMPLEMENTS-AGAINST on code *outside its own write-set*
+  (a repo method, type, function, or interface signature — the `CamelCase` / `Type.Method`
+  identifiers in the prose). For each, `git -C "$REPO" grep -nw '<symbol>'`. A named symbol that
+  returns **no definition** in the repo AND is **not introduced by a `deps` task's write-set** is a
+  **phantom** ⇒ STOP (name the task, the symbol, and the nearest real match grep surfaces — e.g.
+  `CurrentRevision` → did you mean `GetWithRevision`?). When a slice pins a method **signature** it
+  must match, grep the real definition and confirm the arity/return shape the slice states — a
+  signature that disagrees with the real symbol is the same defect.
+
+- **(b) Write-set blast-radius.** For each remaining task, scan its `slice` for any repo path or
+  package named as an **edit/wire target** (not merely read). Every such path must be covered by the
+  task's `files` under the segment-prefix rule, OR the slice must carry an explicit **stay-in-set**
+  note stating how it avoids that edit (read from X instead; defer the wiring to T_n). An edit-target
+  path outside the declared write-set with no such note ⇒ STOP (name the task + path) — at run time
+  the worker either escapes its write-set (gate-blocked) or stalls.
+
+- **(c) Enumerated invariants.** If a slice asserts a "do X in EVERY path that does Y" / "all
+  callers" / "every mutation" invariant, it must **enumerate** the concrete call sites rather than
+  state it abstractly — `git -C "$REPO" grep -n '<the mutation>'` and confirm the slice lists what it
+  finds. An abstract "everywhere" claim with no enumerated site list ⇒ STOP (name the task): an
+  implementer wires the one obvious site and silently misses the rest.
+
+This pre-flight is **advisory about prose, strict about facts**: it never blocks on a symbol a task
+legitimately *creates* within its own write-set — only on a reference to code that does not exist, an
+edit outside the declared write-set, or an unenumerated "everywhere". A plan from `/phase-translate`
+already self-checked against these same three rules, so a clean pass is expected; a failure here
+means the plan drifted from the code since it was written.
 
 ## 4. Scaffold progress.md if missing
 If `docs/<feature>/progress.md` does not exist, create it from `~/.claude/templates/progress.md`: every
