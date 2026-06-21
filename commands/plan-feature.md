@@ -1,18 +1,26 @@
 ---
-description: Self-contained feature planner — grills the idea until every decision is locked, then emits docs/<feature>/plan.md (Locked decisions + Domain glossary + vertical-slice DAG) in the exact format /dev-loop consumes. No superpowers/skills.
+description: Self-contained feature planner — grills the idea until every decision is locked AND grounds the design against the real codebase (verified seam map; every referenced symbol, write-set, and parallel-path invariant checked against the code), then emits docs/<feature>/plan.md (Locked decisions + Domain glossary + grounded vertical-slice DAG) in the exact format /dev-loop consumes, passing its §3.5 pre-flight first try. No superpowers/skills.
 argument-hint: "<feature idea, in your own words> — the thing you want to build"
 ---
 
-# /plan-feature — align, then plan (self-contained)
+# /plan-feature — align, ground, then plan (self-contained)
 
 Turn a feature idea into `docs/<feature>/plan.md` in the **exact** shape the launcher parses
 (`templates/plan.md`). This command is deliberately **standalone**: it calls no skill and no
-plugin — the alignment + planning rituals are spelled out inline below so the loop stays
-portable. Output only; you scaffold nothing else (the `/dev-loop` launcher writes `progress.md`).
+plugin — the alignment + grounding + planning rituals are spelled out inline below so the loop
+stays portable. Output only; you scaffold nothing else (the `/dev-loop` launcher writes `progress.md`).
+
+The plan passes **two gates before you write a line of it**: §1 aligns the design with the **user's
+intent** (grill until every decision is locked); §1.5 grounds it against the **codebase's reality**
+(read the real code; verify every symbol, contract, write-set, and parallel path). Skipping the
+second gate is the failure mode this command exists to prevent — a plan can be perfectly aligned with
+what the user wants and still be wrong about what the code *is*, and that defect is invisible to the
+user yet costs a full implement→review→replan cycle per slice to discover later.
 
 The plan you emit is read by **context-less fan-out agents** who never saw this conversation.
-So every resolved choice, every shared term, and every task slice must stand on its own. Plan
-for that reader, not for yourself.
+So every resolved choice, every shared term, and every task slice must stand on its own — and must be
+**true about the code**, since that reader cannot sanity-check it against the system. Plan for that
+reader, not for yourself.
 
 ## 0. Orient
 - Resolve `<feature>` = a short kebab-case slug from `$ARGUMENTS` (e.g. "rate limit the API" →
@@ -21,6 +29,10 @@ for that reader, not for yourself.
   overwrite a plan a loop may be mid-execution on.
 - Read `~/.claude/templates/plan.md` for the format contract you must emit. Do **not** start writing the
   plan until the alignment gate (§1) is fully resolved.
+- `$REPO` = the directory that actually holds the `.git` for the code this feature changes (the
+  sub-repo / package, **never** a mono-repo root if the code lives in a sub-tree). Every grounding
+  grep in §1.5/§3/§5 is `git -C "$REPO" grep` — get this right or the greps search the wrong tree and
+  every symbol reads as a phantom.
 
 ## 1. Alignment gate (grill — one question at a time)
 Measure twice. Interview the user until **every open decision branch is resolved** — not merely
@@ -47,6 +59,45 @@ Rules for the grilling:
 
 When the gate closes, restate the resolved picture in 3-6 bullets and get a final "yes" before
 planning. Each resolved fork becomes a **Locked decision** (the choice **and its why**).
+
+## 1.5 Ground the design against the codebase (research pass — do this BEFORE decomposing)
+§1 grilled the **user** about intent. This step grills the **codebase** for ground truth. A "new
+feature" still lands inside an existing system, and the single most expensive plan defect is a slice
+that asserts something false about that system — names a type/field/method that doesn't exist,
+reuses an existing contract whose real semantics conflict, declares a write-set narrower than what
+the change must edit, or changes a behavior on one execution path while silently missing its twin.
+**None of these are intent defects the user can catch for you** — they live in the code, so you must
+go read the code. Do not plan from memory of how the system "probably" works.
+
+For every existing surface this feature touches, open it (`git -C "$REPO" grep -nw '<symbol>'`, then
+Read the file) and capture a short **verified seam map** — each design concept → the real
+symbol(s) it maps to, with **name + signature + file pasted from the code, not paraphrased**. Drive
+out, specifically, the surfaces that recur as blockers:
+
+- **Reused / extended types & fields.** Every existing type, struct field, JSON field, enum, or
+  request shape the feature reuses or adds to — grep its real definition AND its **existing
+  semantics/contract**. Reusing a field that already carries a different meaning (e.g. an existing
+  `disposition` that means `queued|held|consumed`) silently breaks the old contract. If your concept
+  needs a new meaning, it needs a **new field/type**, not a borrowed one.
+- **Endpoints / handlers / runners you hook into.** Read what the real one actually returns and how
+  it behaves (e.g. a "durable continuation" endpoint that returns a `runId` and is **headless** — no
+  SSE stream to subscribe to). Plan to the behavior the code has, not the one you assume.
+- **Dependency-injection / wiring seams.** A new dependency (a store, reader, client) almost always
+  must be threaded through a composition root (`container.go`, a provider, a factory). That wiring
+  file is part of the change — find it now so the slice that needs it can declare it.
+- **Parallel execution paths — find the twin.** When the system runs the same logic two ways (live
+  UI runner **and** headless/durable executor; live SSE **and** persisted-history replay;
+  success path **and** failure/rollback path), grep for **all** of them. A behavior added to one and
+  missed on the other is the defect that recurs the most — enumerate every path here so §3 can cover
+  each.
+- **Transactional / idempotency boundaries.** If a new path crosses a transaction, a
+  duplicate-check, or a retry seam, read how failure unwinds (does a rollback discard a decision a
+  later step already persisted? does a retry hit a 409?). A "recoverable" outcome that the real
+  transaction can't actually replay is a phantom guarantee.
+
+This map is the antibody against the most expensive class of revision. If you cannot find a symbol
+your design assumes exists, that is a finding — resolve it (real name, or "this task creates it")
+before it reaches a context-less worker.
 
 ## 2. Domain glossary
 Coin a few (≈3-8) concise shared terms for the nouns/roles this feature introduces, so parallel
@@ -86,6 +137,43 @@ Path rules for `files` (enforced by the parser — get them right or the launche
 Prefer the narrowest write-set that still makes the slice self-contained (a task that declares a
 whole dir `src/` blocks every other task touching anything under `src/` from sharing its layer).
 
+**Ground every slice against the §1.5 seam map as you write it.** A context-less worker implements
+the slice *as written* — if the prose names an API that doesn't exist or a write-set too narrow to
+finish, the worker either invents the wrong thing or gate-blocks. These rules are the exact defect
+classes that otherwise surface only at the review gate (each costs a full
+implement→review→replan→relaunch cycle); satisfying them here makes the plan pass `/dev-loop`'s §3.5
+pre-flight first try:
+
+- **(a) Pin every referenced symbol to a grep-verified definition — no phantom APIs.** Before a
+  slice says "via `Repo.Method`" or "matching `Type.Field`", grep it and paste the **real** name +
+  signature into the slice (e.g. "read through `GetWithRevision(ctx, id) → (content, rev, hash,
+  err)` — NOT an invented `CurrentRevision`"). A symbol the task itself *creates* (in its own
+  write-set) is fine; a symbol it *calls on existing code* must exist today or be created by a `deps`
+  task. If you're unsure of a name, that's the signal to grep, not to guess.
+- **(b) Bound each write-set to the slice's real blast radius — or say how you stay inside it.**
+  Trace what implementing the slice must actually edit. If it naturally touches a file outside `files`
+  — a composition root that wires a new dependency, a caller that must thread a new value, a sibling
+  path — either (i) widen `files` to include it, or (ii) keep the tighter set and add an explicit
+  **stay-in-set** clause naming the in-set mechanism and deferring the rest to a later wiring task.
+  A write-set narrower than the change, with no stay-in-set note, gate-blocks at run time. (A slice
+  that "adds the type/enum/vocabulary" but whose write-set can't reach the code that *acts* on it
+  isn't a vertical slice — it's a horizontal layer in disguise. Make the slice ship **working,
+  observable behavior end-to-end**, or fold it into the task that does.)
+- **(c) Enumerate "everywhere" invariants — never assert them abstractly.** When a slice needs "do X
+  in every path that does Y" / "all callers" / "every mutation", grep the sites and **list them in
+  the slice** (path A, path B, path C). This is where **parallel execution paths** bite: a behavior
+  added to the live runner but not the headless executor, to success but not the failure/rollback
+  path, to live SSE but not persisted-history replay — enumerate the twins from §1.5 so none is
+  silently missed. The enumerated list doubles as the slice's test checklist.
+- **(d) When a slice reuses or touches an existing contract, match its REAL semantics.** Don't just
+  confirm the symbol exists — encode how it actually behaves (a field's existing meaning, an
+  endpoint's headless-vs-streamed shape, a transaction's rollback/retry/idempotency rules). A slice
+  that assumes a borrowed field is free, or that a "recoverable" outcome can replay across a
+  transaction the real code rolls back, is wrong even though every name resolves.
+- **(e) Make each `test` exercise the real changed path.** The `test` must hit the actual seam the
+  slice changes (the live/persisted mapper, the SSE handler, the executor) — not a sibling component
+  that doesn't flow through it. A passing test on the wrong target proves nothing.
+
 **Design the leanest DAG that satisfies the Locked decisions.** Architectural over-engineering is
 invisible to the per-diff review gate — by the time a worker implements a slice, the fact that the
 slice exists and has its shape is already locked. So prune it *here*: prefer the fewest tasks and
@@ -117,8 +205,10 @@ Write the file in the **exact shape of `templates/plan.md`** — same section or
 Optionally add a small "Layering that falls out" table (layer → width → tasks → why) showing the
 fan-out shape — useful, not required.
 
-## 5. Validate before finishing (fail fast)
-Re-read your `tasks` block and check, lexically, exactly what the launcher will check:
+## 5. Validate before finishing (fail fast — both layers)
+Re-read your `tasks` block and check exactly what `/dev-loop` will check.
+
+**Structural (`/dev-loop` §2) — lexical:**
 - **ids**: present, unique, case-sensitive, match `^[A-Za-z0-9_-]+$`.
 - **deps**: every id resolves to a real task; **no cycles** (topologically sortable).
 - **schema**: every task has all required keys, correct types (`files` & `deps` are sequences,
@@ -129,7 +219,23 @@ Re-read your `tasks` block and check, lexically, exactly what the launcher will 
   segment-prefix rule. If any do, either re-split the files or add a `dep` to push one into a
   later layer (and note in `slice`/comment why) — then re-check.
 
-If anything fails, fix the plan and re-validate. Do not hand the user a plan that won't parse.
+**Grounding (`/dev-loop` §3.5) — run the greps yourself now, don't trust the prose:**
+- Every production symbol a slice **calls outside its own write-set** resolves in `$REPO` (or is
+  created by a `deps` task's write-set). Any that greps empty is a phantom — fix the name or move the
+  dependency.
+- Every **edit-target path** a slice names is in its `files` (segment-prefix rule) or covered by an
+  explicit stay-in-set note.
+- Every **"everywhere"** invariant enumerates its concrete sites, and each parallel-path twin from
+  §1.5 is covered by some task.
+A plan that fails its own §3.5 here will STOP at launch — don't hand it over until the greps are clean.
+
+**Plan-internal consistency:** no contradictory text. If a decision **changed during the
+back-and-forth** (e.g. you moved from "reconnect via SSE" to "one-shot refresh"), purge the old
+wording from **every** mention — glossary, locked decisions, and each slice — not just the one you
+last edited. A symbol's signature cited in one task must match the same symbol cited in another.
+
+If anything fails, fix the plan and re-validate. Do not hand the user a plan that won't parse — or
+that won't ground.
 
 ## 6. Hand off
 Tell the user the plan is written, point them at `docs/<feature>/plan.md`, and ask them to review
