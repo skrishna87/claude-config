@@ -24,21 +24,37 @@ reviewers judge the SAME diff by the SAME rubric; you consolidate.
     cross-task contract drift and composition bugs no single task diff shows.
     Diff: `git -C "$REPO" diff <base>...HEAD` (three-dot, against the merge-base).
 - `$ARGUMENTS` may override `$REPO` or pass `--integration <base>`.
+- **Make the plan readable INSIDE `$REPO` (the context mirror).** The plan/progress usually live at
+  the mono root (`docs/<feature>/{plan,progress}.md`), which a reviewer running `-C "$REPO"` — and
+  **especially codex in its read-only sandbox** — cannot reach. Mirror them into the worktree
+  (git-excluded, refreshed NOW so they're never stale), and point every reviewer at the local copy:
+  ```bash
+  mkdir -p "$REPO/.dev-loop"
+  # exclude it once so `git add -A` never stages it (per-repo, untracked — no tracked .gitignore change):
+  EXCL="$(git -C "$REPO" rev-parse --git-common-dir)/info/exclude"   # abs for a linked worktree
+  grep -qxF '.dev-loop/' "$EXCL" 2>/dev/null || echo '.dev-loop/' >> "$EXCL"
+  cp "<abs>/docs/<feature>/plan.md"     "$REPO/.dev-loop/plan.md"
+  cp "<abs>/docs/<feature>/progress.md" "$REPO/.dev-loop/progress.md"
+  ```
+  Now `$REPO/.dev-loop/{plan.md,progress.md}` carries the feature-level context every reviewer needs.
 
 ## 2. Load the rubric + plan
 
 - Read `~/.claude/rubrics/per-task-review.md` — every reviewer gets it verbatim.
-- Read `docs/<feature>/plan.md` (the seam map + the task's acceptance criteria + MUST-NOTs).
-  Reviewers need it for the plan-conformance and composition/twin-path checks — a gate that
-  can't see the plan can't catch a plan violation.
+- Read `$REPO/.dev-loop/plan.md` (the worktree-local mirror from §1) — the seam map + the task's
+  acceptance criteria + MUST-NOTs. Reviewers need it for the plan-conformance and composition/
+  twin-path checks — **a gate that can't see the plan is judging the diff against the rubric alone
+  and cannot catch a plan violation or contract drift.** (`progress.md` is alongside it for the
+  prior-task Done log — useful context for the integration review especially.)
 
 ## 3. Run the reviewers (in parallel)
 
-**Reviewer A — Claude (self):** dispatch a `general-purpose` subagent with the rubric, the
-plan reference, the relevant seam map from plan.md, and the diff. Tell it to read neighboring
-code and the joined flows in `$REPO` for context — and, in `--integration` mode, to actively
-trace cross-task and cross-repo contracts. Hand it crafted context — **not** your session
-history. Require the rubric's output format ending in `VERDICT: PASS/FAIL`.
+**Reviewer A — Claude (self):** dispatch a `general-purpose` subagent with the rubric, the diff,
+and the worktree-local plan at `$REPO/.dev-loop/plan.md` (tell it to READ that file for the seam
+map + acceptance + MUST-NOTs). Tell it to read neighboring code and the joined flows in `$REPO`
+for context — and, in `--integration` mode, to actively trace cross-task and cross-repo contracts.
+Hand it crafted context — **not** your session history. Require the rubric's output format ending
+in `VERDICT: PASS/FAIL`.
 
 **Reviewer B — codex (cross-model):**
 ```bash
@@ -46,10 +62,13 @@ codex exec -C "$REPO" -s read-only -o /tmp/codex-review.md \
   "$(cat ~/.claude/rubrics/per-task-review.md)
 
 Run 'git diff' (or 'git diff <base>...HEAD' for an integration review) to see the changes and
-review ONLY those, against the plan at docs/<feature>/plan.md. Trace how they compose with the
-flows they join and check twin-path symmetry."
+review ONLY those, against the plan at .dev-loop/plan.md (read it — it holds the acceptance
+criteria, seam map, and MUST-NOTs for this work). Trace how they compose with the flows they join
+and check twin-path symmetry."
 ```
 Then read `/tmp/codex-review.md`.
+- The `.dev-loop/plan.md` path is the worktree-local mirror from §1 — codex `-C "$REPO"` can read
+  it where it could not read the mono-root `docs/<feature>/plan.md`.
 - `-C "$REPO"` points codex at the real git dir; `-s read-only` lets it introspect without writing.
 - If codex errors on git, retry once adding `--skip-git-repo-check`.
 - If codex is unavailable/unauthed, proceed with Reviewer A alone but **explicitly flag that

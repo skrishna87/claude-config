@@ -15,4 +15,5 @@
 - <env traps, exact build/test commands, anything that bit us>
 
 ## How to resume
-Run `/dev-loop <feature>`.
+Run `/dev-loop <feature>` (you drive) or `/dev-loop-auto <feature>` (hands-off) — same state,
+interchangeable.
