@@ -19,6 +19,10 @@ link() { # link <repo-relative-src> <claude-relative-dest>
 # --- active loop (resume-notes + planner + multi-axis gate) ------------------------
 link commands/plan-feature.md      commands/plan-feature.md
 link commands/dev-loop.md          commands/dev-loop.md
+link commands/dev-loop-auto.md     commands/dev-loop-auto.md
+link workflows/dev-loop-auto.js    workflows/dev-loop-auto.js
+link commands/dev-loop-agent.md    commands/dev-loop-agent.md
+link agents/dev-loop-orchestrator.md  agents/dev-loop-orchestrator.md
 link commands/review-task.md       commands/review-task.md
 link rubrics/per-task-review.md    rubrics/per-task-review.md
 link reference/seam-design.md      reference/seam-design.md
@@ -27,5 +31,7 @@ link templates/plan.md             templates/plan.md
 link templates/progress.md         templates/progress.md
 
 echo
-echo "Active loop linked: /plan-feature (align→ground→spec→slice) + /dev-loop + /review-task."
+echo "Active loop linked: /plan-feature (align→ground→spec→slice) + /dev-loop (manual driver)"
+echo "  + /dev-loop-auto (Workflow driver) + /dev-loop-agent (agent driver) + /review-task."
+echo "  All three drivers share the same plan.md + progress.md state."
 echo "The previous DAG-orchestrator loop (v2) is ARCHIVED under archive/dev-loop-v2/."
