@@ -89,6 +89,18 @@ git clone <this-repo> ~/projects/claude-config
 `bootstrap.sh` makes per-file symlinks into `~/.claude`, leaving your other commands/skills/
 plugins untouched. (To run the archived v2 loop instead, use `archive/dev-loop-v2/bootstrap.sh`.)
 
+For Codex, the portable first piece is the planner. Link it with:
+
+```bash
+~/projects/claude-config/bootstrap-codex.sh
+```
+
+That installs the `grounded-plan-feature` skill into `~/.codex/skills`. It ports `/plan-feature`
+into Codex's skill model: align only when needed, ground claims against real `file:line` symbols,
+write `docs/<feature>/plan.md` in the required format, slice vertical tasks, and seed
+`progress.md`. The Claude execution loops are not directly portable as-is because they rely on
+Claude slash commands, nested Agent calls, and Workflow JS execution.
+
 ## Credits
 
 The planner and gate vendor and adapt two MIT-licensed skill collections — kept self-contained

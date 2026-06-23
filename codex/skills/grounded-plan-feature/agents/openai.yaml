@@ -1,0 +1,7 @@
+interface:
+  display_name: "Grounded Plan Feature"
+  short_description: "Plan features with seams and vertical slices"
+  default_prompt: "Use $grounded-plan-feature to create a grounded implementation plan for this feature."
+
+policy:
+  allow_implicit_invocation: true
