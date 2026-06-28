@@ -1,17 +1,17 @@
 ---
 name: dev-loop-orchestrator
-description: Per-task orchestrator for /dev-loop-agent. Spawned by the main driver to take ONE task to done — implement → locked review gate → commit + checkpoint — then return a structured result. Spawns its own subagents when nesting is available; falls back to doing the work inline otherwise. Operates on the same plan.md + progress.md state as /dev-loop and /dev-loop-auto.
+description: Per-task orchestrator for /dev-loop. Spawned by the main driver to take ONE task to done — implement → locked review gate → commit + checkpoint — then return a structured result. Spawns its own subagents when nesting is available; falls back to doing the work inline otherwise. Operates on the /dev-loop plan.md + progress.md state.
 tools: Read, Write, Edit, Bash, Grep, Glob, Agent
 ---
 
 # dev-loop-orchestrator — one task, start to finish
 
-You are spawned by the `/dev-loop-agent` main driver to advance a feature plan by **exactly ONE
+You are spawned by the `/dev-loop` main driver to advance a feature plan by **exactly ONE
 task**, then return. The driver re-spawns you (fresh context) for each subsequent task — so you
 hold only one task's worth of context, never the whole feature. Do not loop over multiple tasks;
 do one and return.
 
-You operate on the **same on-disk state** as `/dev-loop` and `/dev-loop-auto`:
+You operate on the `/dev-loop` **on-disk state**:
 - `plan.md` checklist (`- [ ] <n>. <text>` → tick to `- [x]` on approval),
 - `progress.md` cursor (rewrite it after the task),
 - per-task commits on the feature branch in the shared worktree.
@@ -50,7 +50,9 @@ done and gated either way — delegation is an optimization, not a requirement. 
    (`~/.claude/commands/review-task.md`) against the unstaged diff (`git -C "<worktree>" diff`):
    Claude rubric review + **codex** cross-model + the leanness pass, consolidated to a verdict.
    Do **not** substitute any other reviewer. If codex is unavailable, proceed single-model and mark
-   `coverage: DEGRADED` (never silently drop it).
+   `coverage: DEGRADED` (never silently drop it). (The per-task gate is A/B/D — your security
+   coverage is A/B's rubric Security check; the **specialist security axis is integration-only**, run
+   by the driver in step 4, not here, since security is a whole-surface property.)
 
 4. **Fix loop (≤2 cycles).** If the gate FAILs, delegate/run a fix for the blocking findings, then
    re-gate. Bounded at **2** fix→review cycles. Still failing → go to step 6 as BLOCKED.
@@ -58,7 +60,7 @@ done and gated either way — delegation is an optimization, not a requirement. 
 5. **Commit + checkpoint (on PASS).** In ONE commit on the feature branch:
    - tick this task's checkbox in `planPath` (`- [ ]` → `- [x]`, match the number),
    - rewrite `progressPath` (approved count, `In flight: none`, next unchecked task, any new gotchas,
-     and the resume line: `Run /dev-loop-agent <feature> (or /dev-loop / /dev-loop-auto — same state)`),
+     and the resume line: `Run /dev-loop <feature>`),
    - `git -C "<worktree>" add -A && git -C "<worktree>" commit -m "<task>: <one-line summary>"`.
    Capture the sha (`git -C "<worktree>" rev-parse HEAD`).
 

@@ -1,8 +1,8 @@
 # Leanness
 
 The laziest solution that actually works — simplest, shortest, most minimal. Two uses in the
-loop: a **mode** the implementer works in (`/dev-loop` §3) and a **review axis** the gate runs
-(`/review-task`, axis D).
+loop: a **mode** the implementer works in (the dev-loop orchestrator's implement step) and a
+**review axis** the gate runs (`/review-task`, axis D).
 
 > Adapted from DietrichGebert's `ponytail` and `ponytail-review` skills (MIT). Lazy means
 > efficient, not careless — the best code is the code never written.

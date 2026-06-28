@@ -15,5 +15,5 @@
 - <env traps, exact build/test commands, anything that bit us>
 
 ## How to resume
-Run `/dev-loop <feature>` (you drive) or `/dev-loop-auto <feature>` (hands-off) — same state,
-interchangeable.
+Run `/dev-loop <feature>` — it reconstructs the done-set from git + this cursor and continues
+(spawning one orchestrator per remaining task).
