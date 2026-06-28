@@ -1,94 +1,93 @@
 ---
-description: Resumable, checkpoint-driven execution loop. Works a feature's plan task-by-task in an isolated worktree — subagent per task, locked dual review gate, commit-on-pass, checkpoint after each task. Survives /clear.
+description: The checkpoint-driven execution loop. The main thread loops, spawning a fresh dev-loop-orchestrator AGENT per task; each orchestrator takes one task to done (implement → locked review gate → commit + checkpoint) via its own subagents and returns. Works a grounded plan.md task-by-task in an isolated worktree; survives /clear.
 argument-hint: "<feature-name> to start/resume; omit to auto-detect the active feature"
 ---
 
-# /dev-loop — checkpoint-driven execution loop
+# /dev-loop — checkpoint-driven execution loop (orchestrator-per-task)
 
-Drive a feature to completion across as many fresh sessions as it takes, never relying on
-context compaction. The invariant at every task boundary (this is what makes `/clear`
-always safe):
+The execution loop over a grounded `plan.md` + `progress.md`. The loop lives in the **main thread**,
+and each task is handled by a freshly spawned **`dev-loop-orchestrator` agent** that does the task
+via its own subagents and returns:
 
-- **feature-branch commits** = approved tasks (each passed the review gate)
-- **working tree** = the current task in flight (or clean)
-- **`docs/<feature>/progress.md`** = the cursor (done / next / gotchas / how to resume)
+```
+main driver (this thread): orient → ensure worktree → LOOP:
+    └─ Agent(dev-loop-orchestrator)   ← one task: implement → gate(≤2 fix) → commit + checkpoint
+         └─ (its own subagents: implement / review / fix)        → returns ORCHESTRATOR RESULT
+    read result → APPROVED & tasks remain? loop again : stop
+  all tasks checked → integration review → (on your OK) FF-merge
+```
 
-**Prereq:** a grounded plan exists at `docs/<feature>/plan.md` as a checklist — produced by
-`/plan-feature` (align → ground → spec → slice), which also seeds `progress.md`. If you skipped
-the planner, run it first; a plan that isn't grounded (unpinned symbols, unmapped seams) is
-where the seam bugs come from. If `progress.md` is missing, create it from the plan (all items
-unchecked) using the template.
+**Context model:** the main thread only spawns + reads a one-line result per task, so the
+review-heavy work lives in each per-task orchestrator's context, not here. The main thread still
+accumulates one summary per task (not zero) and can't `/clear` itself — so for a very large feature
+you may hit a context ceiling: `/clear` and relaunch (the checkpoint is on disk every task, so you
+lose at most the in-flight task). If you ever need a truly zero-context driver — a huge feature, a
+hard quota cap, or a harness that disables nesting — the previous JS-Workflow driver (`/dev-loop-auto`)
+and the manual driver are archived and restorable under `archive/superseded-drivers/`.
 
-## 0. Orient (always first)
-- Resolve `<feature>` from `$ARGUMENTS`, else auto-detect from `docs/*/progress.md` with
-  unfinished items.
+> **Harness dependency:** this variant relies on **nested `Agent` calls** (the orchestrator agent
+> spawning its own subagents). If your harness disables or depth-caps that, the orchestrator falls
+> back to doing implement/review **inline** in its own context — still correct, just less isolation
+> (its `notes` line reports `inline` vs `delegated`). If you see `inline` every task, nesting is off.
+
+**Prereq:** a grounded `docs/<feature>/plan.md` from `/plan-feature` (the per-task orchestrators are
+context-isolated, so they lean hard on the plan). Missing `progress.md` → seed from the template.
+
+## 0. Orient
+- Resolve `<feature>` from `$ARGUMENTS`, else auto-detect from `docs/*/progress.md` with unfinished items.
 - Read `docs/<feature>/plan.md` + `docs/<feature>/progress.md`.
-- Reconstruct state **from git, not memory**: `git -C <worktree> log --oneline
-  <base>..HEAD` (approved tasks) and `git -C <worktree> status` (in flight). Cross-check
-  against the checklist.
+- Reconstruct from git, not memory: `git -C <worktree> log --oneline <base>..HEAD` + `git -C <worktree>
+  status`. If a task is mid-flight (uncommitted changes), the first orchestrator will finish/gate THAT
+  one before any new task.
 
 ## 1. Ensure isolation (worktree + branch)
-Per the mono-repo worktree rule, work in `.worktrees/<repo>/<branch>` at the **mono root**,
-branched off the source branch.
-- Resuming → use the existing worktree/branch (path is in progress.md).
-- Creating → `git -C <subrepo> worktree add <mono-root>/.worktrees/<repo>/<branch> -b
-  <branch> <source>`. Copy any gitignored `.env` into it; recreate `.venv`
-  (`rm -rf .venv && uv sync`) if present. Record worktree path + base sha + source branch
-  in progress.md.
+Work in `.worktrees/<repo>/<branch>` at the mono root, branched off
+source. Resuming → reuse the recorded worktree/branch. Creating → `git -C <subrepo> worktree add
+<mono-root>/.worktrees/<repo>/<branch> -b <branch> <source>`; copy gitignored `.env`; recreate `.venv`
+(`rm -rf .venv && uv sync`) if present; record worktree path + base sha + source in progress.md.
 
-## 2. Pick the next task
-First unchecked item in the plan checklist. If a task was interrupted mid-flight
-(uncommitted changes exist), finish + review THAT before picking a new one.
+## 2. Gather the brief (once)
+From `plan.md`, extract the **`## Seam map`** text and **`## Locked decisions`** text. Note the
+absolute `worktree`, `planPath` (`docs/<feature>/plan.md`), `progressPath`, `baseSha`, `source`, and
+the fixed reference paths: `rubricPath=~/.claude/rubrics/per-task-review.md`,
+`reviewGatePath=~/.claude/commands/review-task.md`, `leannessPath=~/.claude/reference/leanness.md`.
 
-## 3. Implement (subagent per task)
-Dispatch ONE fresh subagent to implement ONLY this task. Brief: the task text + its acceptance
-criteria, the relevant seam map / files / conventions from plan.md, and "leave changes in the
-working tree — do NOT stage or commit; return a summary + the list of changed files." Tell it
-to work in **ponytail mode** (`~/.claude/reference/leanness.md`) — the laziest solution that
-actually works, minus the carve-outs (validation, error handling, security never get simplified
-away). You coordinate and review; the subagent does the edits, so your own context stays lean.
+## 3. Loop: one orchestrator agent per task
+Repeat until the plan has no unchecked tasks (or an orchestrator returns BLOCKED):
 
-## 4. Review gate
-Run the gate by following `~/.claude/commands/review-task.md` against the unstaged diff.
-- **PASS** → step 5.
-- **FAIL** → dispatch a fix subagent with the consolidated findings, then re-review.
-  Bounded: up to 2 fix→review cycles. Still failing → STOP, update progress.md, surface
-  the blockers to the user.
+1. Spawn a **`dev-loop-orchestrator`** agent via the **Agent tool** (`subagent_type:
+   "dev-loop-orchestrator"`). Brief it with everything from step 2 plus: *"Advance this plan by
+   exactly ONE task — the first unchecked — then return your ORCHESTRATOR RESULT block. Work only in
+   <worktree>."* Hand it crafted context, not your session history.
+2. Read the returned `ORCHESTRATOR RESULT` block:
+   - **`status: APPROVED`** and `remaining > 0` → loop (spawn the next orchestrator). The plan box,
+     progress.md, and commit are already updated, so the next orchestrator sees fresh state.
+   - **`status: DONE`** (or `remaining: 0`) → exit the loop → step 4.
+   - **`status: BLOCKED`** → STOP. Surface `blocking`, show `git -C <worktree> log --oneline
+     <base>..HEAD`, note the working tree holds the in-flight task. The user fixes/re-plans, then
+     relaunches `/dev-loop`. Do NOT continue past a block — a later task likely
+     depends on it.
+   - If `coverage: DEGRADED`, record it; report loudly at the end (codex was down → single-model).
+3. Keep your own per-iteration footprint minimal: trust the orchestrator's result + the on-disk state;
+   you do not need to re-read the whole diff each loop.
 
-## 5. Commit + checkpoint (on pass)
-- `git -C <worktree> add -A && git -C <worktree> commit -m "<task>: <one-line summary>"`
-  (provisional, isolated in the worktree — nothing touches source yet).
-- Tick the task's checkbox in `plan.md`.
-- Rewrite `progress.md`: done list, next task, branch/base/worktree, new gotchas, how to
-  resume. Keep it self-contained — a fresh session reads only this + plan.md.
-
-## 6. Continue or yield
-After each task decide:
-- **Continue** to the next task if context is healthy and tasks are small.
-- **Yield** if ≈3–4 tasks done since the last clear, a task touched many files, or context
-  feels heavy. To yield: confirm progress.md is current, then tell the user verbatim —
-  `Checkpoint saved — <feature> at task <n>/<m>. Run /clear, then /dev-loop <feature> to
-  continue.` — and STOP.
-
-Always finish the current task cleanly (review + commit + checkpoint) before yielding —
-**never yield mid-task.**
-
-## 7. Done — integration review, then hand off
-When every checklist item is checked, run **one whole-feature integration review** before
-offering to merge — this is the gate no single task diff can be: it's where cross-task and
-cross-repo contract drift, composition with untouched flows, and twin-path asymmetry finally
-show. Follow `~/.claude/commands/review-task.md` with `--integration <base>` (scope = `git diff
-<base>...HEAD`).
-- **FAIL** → the seams don't hold. Surface the blockers, add fix tasks to plan.md, and keep
-  looping — do NOT offer to merge.
-- **PASS** → STOP. Summarize, show `git -C <worktree> log --oneline <base>..HEAD`, and tell the
-  user: do your final review / manual test; on your confirmation I'll fast-forward `<branch>`
-  onto `<source>` (and push if you want). **Never FF or push without explicit confirmation.**
+## 4. Integration review + hand off
+When every checklist item is checked, run the **whole-feature** integration review — the seam **and
+security** gate no single task diff can be (the specialist security axis, Reviewer C, runs *here*,
+not in the per-task orchestrator gate — security is a whole-surface property). Either spawn one
+orchestrator-style reviewer or follow `~/.claude/commands/review-task.md` with `--integration <base>`
+(scope = `git diff <base>...HEAD`).
+- **FAIL** → seams don't hold. Surface the blockers, add fix tasks to `plan.md` (unchecked), keep
+  looping (back to step 3). Do NOT offer to merge.
+- **PASS** → STOP. Summarize, show `git -C <worktree> log --oneline <base>..HEAD`, and tell the user:
+  do your final review / manual test; on your confirmation I'll fast-forward `<branch>` onto `<source>`
+  (and push if you want). **Never FF or push without explicit confirmation.**
 
 ## Notes
-- Checkpoint after EVERY task (cheap); `/clear` only OCCASIONALLY (expensive — it's the
-  one thing that drops context). A `/clear` then costs at most one in-flight task.
-- This loop owns the per-task review via review-task.md — do not pull in other reviewer
-  plugins inside the loop.
-- Provisional per-task commits live only in the isolated worktree; to reshape history
-  before FF, `git reset --soft <base>` and recommit.
+- **Locked gate**: orchestrators use ONLY `~/.claude/commands/review-task.md` + the rubric — no other
+  reviewer plugin — so results are reproducible across tasks and sessions.
+- **Context**: the review-heavy work lives a level down in each orchestrator, but the main thread
+  still accumulates one summary per task. If it feels heavy after many tasks, checkpoint is already on
+  disk every task — `/clear` and relaunch costs at most the in-flight task.
+- **Provisional commits** live in the worktree; reshape with `git reset --soft <base>` before FF.
+  Nothing touches `<source>` until you confirm.

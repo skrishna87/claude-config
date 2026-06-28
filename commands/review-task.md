@@ -1,5 +1,5 @@
 ---
-description: Locked review gate — cross-model rubric review (Claude self + codex) plus a leanness pass, over a task's diff or a whole feature. The ONLY reviewer /dev-loop uses.
+description: Locked review gate — cross-model rubric review (Claude self + codex) plus dedicated security and leanness passes, over a task's diff or a whole feature. The ONLY reviewer /dev-loop uses.
 argument-hint: "[repo/worktree path] [--integration <base-ref> for a whole-feature review]"
 ---
 
@@ -74,7 +74,20 @@ Then read `/tmp/codex-review.md`.
 - If codex is unavailable/unauthed, proceed with Reviewer A alone but **explicitly flag that
   coverage was single-model** — never silently drop the cross-model reviewer.
 
-**Reviewer C — leanness (advisory):** a `general-purpose` subagent with
+**Reviewer C — security (specialist) — `--integration` mode ONLY:** security is a whole-surface
+property — cross-task auth drift, trust-boundary confusion, and missing-authz bugs only appear once
+the whole feature is assembled, and a single task diff structurally can't show them. So this axis
+runs **only when reviewing a whole feature** (`--integration`). On a **per-task** diff, **skip it** —
+the rubric's Security check under Reviewers A and B already catches obvious in-diff vulns (hardcoded
+secrets, blatant injection, unsafe HTML on user input), and the authoritative specialist pass runs
+once at integration, before anything merges.
+When it runs: a `general-purpose` subagent with `~/.claude/reference/security-review.md` and the
+whole-feature diff. It hunts *exploitable* vulnerabilities with deepsec's false-positive discipline
+(prove the missing mitigation before flagging), traces auth across the whole feature, and triages
+each by exploitability × impact. Output: one line per finding tagged `P0/P1/P2` with `file:line` +
+vuln slug, ending `VERDICT: PASS/FAIL`. **P0/P1 are blocking; P2 is advisory.**
+
+**Reviewer D — leanness (advisory):** a `general-purpose` subagent with
 `~/.claude/reference/leanness.md` and the diff. Over-engineering only — `delete/stdlib/native/
 yagni/shrink`, ending `net: -N lines possible` or `Lean already. Ship.` This axis is advisory.
 
@@ -84,16 +97,25 @@ yagni/shrink`, ending `net: -N lines possible` or `Lean already. Ship.` This axi
   Claude's and codex's lists visible side by side — do not average them.
 - Where the two reviewers **disagree** (one flags, the other doesn't), investigate the flagged
   item yourself and decide — disagreements are where blind spots hide.
-- Assign final severity per the rubric. Leanness findings stay in their own advisory block
-  (non-blocking unless the over-engineering is egregious).
+- Assign final severity per the rubric. **Security:** per-task, security findings come only from
+  Reviewers A/B's rubric Security check — bucket them as Critical/Important like any rubric finding.
+  At `--integration`, **Reviewer C also runs** — map its findings by triage (**P0/P1 → blocking** as
+  Critical/Important, **P2 → advisory**); where C and A/B flag the same issue, dedupe — don't
+  double-count; where only C flags it, trust the catalog but confirm the mitigation is truly absent
+  before blocking.
+- Leanness findings stay in their own advisory block (non-blocking unless the over-engineering is
+  egregious).
 
 ## 5. Verdict
 
 ```
 REVIEW: <feature> / <task|INTEGRATION since base>
   Claude: <Crit/Imp/Min>   codex: <Crit/Imp/Min>   [single-model if codex unavailable]
+  Security (Reviewer C, --integration only): <P0/P1 blocking findings with file:line + slug | "none" | "n/a (per-task)">  (P2 advisory: <n>)
   Blocking: <Critical+Important findings with file:line, grouped by section, or "none">
   Leanness (advisory): <net: -N lines possible | Lean already>
   VERDICT: PASS | FAIL
 ```
-**PASS** = zero unresolved Critical or Important. Minor + leanness issues are noted, not blocking.
+**PASS** = zero unresolved Critical or Important. Per-task that includes any security issue A/B flag
+from the rubric; at `--integration` it also requires **zero security P0/P1** from Reviewer C. Minor,
+security P2, and leanness issues are noted, not blocking.
