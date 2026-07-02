@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<style>
+  /* Sky Blue design system tokens (claude.ai/design project REDACTED — REDACTED).
+     Light is default; dark swaps via prefers-color-scheme. */
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Inter:wght@300..700&display=swap');
+  :root {
+    --background: #f5f8fc;
+    --card: #ffffff;
+    --foreground: #0f172a;
+    --muted-foreground: #64748b;
+    --secondary: #eaf1f8;
+    --border: #e1e8f1;
+    --primary: #0284c7;          /* Sky Blue */
+    --accent-foreground: #0063bf;
+    --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04);
+    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    --font-display: 'Fraunces', ui-serif, Georgia, serif;
+    /* intent colors for diagram classes — fixed across modes so they always
+       match the classDef hex baked into the mermaid sources */
+    --create: #2f8f46;           /* success */
+    --changed: #0284c7;          /* primary */
+    --risk: #e2891f;             /* warning */
+    --blocked: #cf556b;          /* destructive */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: #0a101d;
+      --card: #111b32;
+      --foreground: #e2e8f0;
+      --muted-foreground: #94a3b8;
+      --secondary: #14213b;
+      --border: #1e2a47;
+      --primary: #0ea5e9;
+      --accent-foreground: #7dd3fc;
+      --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.25);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    font: 15px/1.55 var(--font-sans);
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 40px 24px 64px; }
+  header .eyebrow {
+    color: var(--primary); font-size: 12px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin: 0 0 6px;
+  }
+  header h1 {
+    font-family: var(--font-display); font-size: 32px; font-weight: 600;
+    margin: 0 0 6px; letter-spacing: -0.01em;
+  }
+  header .subtitle { color: var(--muted-foreground); margin: 0 0 24px; }
+
+  .tiles { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 12px; }
+  .tile {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    box-shadow: var(--shadow-card); padding: 14px 18px; min-width: 150px;
+  }
+  .tile .label { color: var(--muted-foreground); font-size: 13px; }
+  .tile .value { font-family: var(--font-display); font-size: 30px; font-weight: 550; margin-top: 2px; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 28px; color: var(--muted-foreground); font-size: 13px; }
+  .legend .chip { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .swatch {
+    width: 12px; height: 12px; border-radius: 4px; border: 2px solid var(--c);
+    background: color-mix(in srgb, var(--c) 14%, transparent);
+  }
+  .legend .swatch.dashed { border-style: dashed; }
+
+  section.card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    box-shadow: var(--shadow-card); padding: 20px 24px 16px; margin: 0 0 24px;
+  }
+  section.card h2 { font-family: var(--font-display); font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  section.card .caption { color: var(--muted-foreground); margin: 0 0 12px; font-size: 14px; }
+  pre.mermaid { display: flex; justify-content: center; overflow-x: auto; margin: 0; }
+  pre.mermaid:not([data-processed]) { color: var(--muted-foreground); font-size: 12px; }
+  details { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 8px; }
+  details summary { color: var(--muted-foreground); font-size: 12.5px; cursor: pointer; }
+  details pre { color: var(--muted-foreground); font-size: 12.5px; overflow-x: auto; }
+
+  .questions {
+    background: var(--secondary); border-left: 3px solid var(--risk);
+    border-radius: 0 12px 12px 0; padding: 12px 16px; margin: 0 0 24px;
+  }
+  .questions h2 { font-family: var(--font-display); font-size: 17px; font-weight: 600; margin: 0 0 6px; }
+  .questions ul { margin: 0; padding-left: 18px; }
+  .questions li { margin: 4px 0; }
+
+  .offline-banner, .diagram-error {
+    border: 1px solid var(--risk); border-radius: 12px; padding: 10px 14px;
+    color: var(--muted-foreground); font-size: 13.5px; margin: 0 0 16px;
+  }
+  .offline-banner { display: none; }
+
+  footer { color: var(--muted-foreground); font-size: 12.5px; margin-top: 8px; }
+
+  @media print {
+    body { background: #fff; }
+    section.card { break-inside: avoid; box-shadow: none; }
+    details, .offline-banner { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">Flow report</p>
+    <h1>{{TITLE}}</h1>
+    <p class="subtitle">{{SUBTITLE}}</p>
+  </header>
+
+  <div class="tiles">
+    {{TILES}}
+    <!-- <div class="tile"><div class="label">Tasks done</div><div class="value">5 / 8</div></div> -->
+  </div>
+
+  <div class="legend">
+    {{LEGEND}}
+    <!-- keep only the chips the diagrams actually use:
+    <span class="chip"><span class="swatch dashed" style="--c:var(--create)"></span>to be built</span>
+    <span class="chip"><span class="swatch" style="--c:var(--changed)"></span>changed by this work</span>
+    <span class="chip"><span class="swatch" style="--c:var(--risk)"></span>open question / hotspot</span>
+    <span class="chip"><span class="swatch" style="--c:var(--blocked)"></span>blocking</span>
+    -->
+  </div>
+
+  <div class="offline-banner" id="offline">
+    Diagrams need the Mermaid CDN once (network). Offline right now — the raw diagram
+    sources are expanded below each section instead.
+  </div>
+
+  {{SECTIONS}}
+  <!-- one card per diagram:
+  <section class="card">
+    <h2>Task lifecycle</h2>
+    <p class="caption">What to look at: every path out of REVIEW must land in a terminal state.</p>
+    <pre class="mermaid">
+stateDiagram-v2
+    [*] --> Implement
+    Implement --> Review
+    Review --> Done: PASS
+    Review --> Fix: FAIL
+    Fix --> Review
+    </pre>
+    <details><summary>diagram source (offline fallback)</summary><pre>
+...same mermaid source, HTML-escaped...
+    </pre></details>
+  </section>
+  -->
+
+  <div class="questions">
+    <h2>Open questions</h2>
+    <ul>
+      {{QUESTIONS}}
+    </ul>
+  </div>
+
+  <footer>Generated by flow-report · Sky Blue · point-in-time snapshot — regenerate rather than edit.</footer>
+</main>
+
+<script type="module">
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  try {
+    const { default: mermaid } = await import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs");
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: "base",
+      themeVariables: dark ? {
+        background: "#111b32", primaryColor: "#14213b", primaryTextColor: "#e2e8f0",
+        primaryBorderColor: "#94a3b8", lineColor: "#94a3b8", secondaryColor: "#14213b",
+        tertiaryColor: "#0e2233", fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif",
+      } : {
+        background: "#ffffff", primaryColor: "#eaf1f8", primaryTextColor: "#0f172a",
+        primaryBorderColor: "#64748b", lineColor: "#64748b", secondaryColor: "#eaf1f8",
+        tertiaryColor: "#e1f0fb", fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif",
+      },
+    });
+    for (const el of document.querySelectorAll("pre.mermaid")) {
+      try {
+        await mermaid.run({ nodes: [el] });
+      } catch (e) {
+        el.outerHTML = `<div class="diagram-error">Diagram failed to render: ${e.message ?? e}</div>`;
+      }
+    }
+  } catch {
+    document.getElementById("offline").style.display = "block";
+    document.querySelectorAll("details").forEach((d) => (d.open = true));
+    document.querySelectorAll("pre.mermaid").forEach((p) => (p.style.display = "none"));
+  }
+</script>
+</body>
+</html>

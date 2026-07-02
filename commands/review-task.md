@@ -47,7 +47,21 @@ reviewers judge the SAME diff by the SAME rubric; you consolidate.
   and cannot catch a plan violation or contract drift.** (`progress.md` is alongside it for the
   prior-task Done log — useful context for the integration review especially.)
 
-## 3. Run the reviewers (in parallel)
+## 3. Execute before you review (green precondition)
+
+Static review can't see a test that doesn't run. Resolve the verify command(s) — plan.md's
+**Verify commands**, the progress.md Gotchas, or detect from the repo — then:
+- **Per-task**: the orchestrator has normally already run verify; trust its reported result if
+  given, otherwise run the fast/relevant subset now.
+- **Integration**: run the **FULL suite** in `$REPO`, always. A red suite (or a build that doesn't
+  compile) is an automatic `VERDICT: FAIL` — report the failures and stop; don't spend reviewer
+  passes on a diff that's already broken.
+- No verify command resolvable → proceed, but report `Verify: NONE` in the verdict — never silently.
+- *Mutation tooling (optional, advisory)*: at integration, if the repo already ships a mutation
+  config (stryker, mutmut, cargo-mutants), you MAY run it scoped to the feature's files and fold
+  survivors into Test-audit as advisory findings — never blocking, never install tooling for this.
+
+## 4. Run the reviewers (in parallel)
 
 **Reviewer A — Claude (self):** dispatch a `general-purpose` subagent with the rubric, the diff,
 and the worktree-local plan at `$REPO/.dev-loop/plan.md` (tell it to READ that file for the seam
@@ -91,7 +105,7 @@ vuln slug, ending `VERDICT: PASS/FAIL`. **P0/P1 are blocking; P2 is advisory.**
 `~/.claude/reference/leanness.md` and the diff. Over-engineering only — `delete/stdlib/native/
 yagni/shrink`, ending `net: -N lines possible` or `Lean already. Ship.` This axis is advisory.
 
-## 4. Consolidate
+## 5. Consolidate
 
 - Group findings by rubric section (so a passing section never masks a failing one). Keep
   Claude's and codex's lists visible side by side — do not average them.
@@ -106,10 +120,11 @@ yagni/shrink`, ending `net: -N lines possible` or `Lean already. Ship.` This axi
 - Leanness findings stay in their own advisory block (non-blocking unless the over-engineering is
   egregious).
 
-## 5. Verdict
+## 6. Verdict
 
 ```
 REVIEW: <feature> / <task|INTEGRATION since base>
+  Verify: PASS <cmd> | FAIL (auto-FAIL) | NONE (no test command found)
   Claude: <Crit/Imp/Min>   codex: <Crit/Imp/Min>   [single-model if codex unavailable]
   Security (Reviewer C, --integration only): <P0/P1 blocking findings with file:line + slug | "none" | "n/a (per-task)">  (P2 advisory: <n>)
   Blocking: <Critical+Important findings with file:line, grouped by section, or "none">
