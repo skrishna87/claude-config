@@ -23,12 +23,13 @@ lives a level down, so the main thread stays lean.
 /plan-feature <feature>     align → ground → spec → slice   (pauses for approval between stages)
         │                   → docs/<feature>/plan.md  (a grounded, vertical-slice checklist)
         ▼
-/dev-loop <feature>         orient → ensure worktree → LOOP per task:
-        │                     └─ orchestrator agent: implement (lean) → review gate (≤2 fix)
-        │                        → commit + rewrite progress.md   → returns a one-line result
+/dev-loop <feature>         orient → ensure worktree + publish branch → LOOP per task:
+        │                     └─ orchestrator agent: implement (lean) → verify (RUN tests)
+        │                        → review gate (≤2 fix) → commit + push + rewrite progress.md
+        │                        → returns a one-line result
         ▼
-        └─ all tasks done → whole-feature integration review (incl. the security axis)
-                          → (on your OK) FF-merge
+        └─ all tasks done → full suite run + whole-feature integration review (incl. security)
+                          → (on your OK) FF-merge → (on your OK) cleanup
 ```
 
 - **`/plan-feature`** — turns a rough idea into the plan `/dev-loop` executes. Four stages, each
@@ -38,16 +39,22 @@ lives a level down, so the main thread stays lean.
   stops phantom-API and contract-drift bugs before they're ever written down.
 - **`/dev-loop`** — drives the plan to completion across as many fresh sessions as it takes. The main
   thread loops, spawning a fresh `dev-loop-orchestrator` agent (`agents/dev-loop-orchestrator.md`) per
-  task; each orchestrator does implement → gate → commit + checkpoint via its own subagents and
-  returns a one-line result, keeping the main thread lean. Invariant at every task boundary (this is
-  what makes `/clear` always safe): feature-branch commits = approved tasks, working tree = the task
-  in flight, `progress.md` = the cursor. Relies on nested sub-agents; degrades to inline if the
-  harness disables them. When every task is checked it runs the whole-feature integration review —
-  the seam **and** security gate no single task diff can be — then offers the FF-merge.
-- **`/review-task`** — the locked gate: cross-model rubric review (Claude self + codex) plus a
-  specialist **security** pass (`--integration` only — security is a whole-surface property) and a
-  **leanness** pass, over a task's diff — or, with `--integration <base>`, the whole feature, to
-  catch the cross-task contract drift and whole-surface security issues no single task diff shows.
+  task; each orchestrator does implement → **verify (actually runs the repo's tests)** → gate →
+  commit + push + checkpoint via its own subagents and returns a one-line result, keeping the main
+  thread lean. The feature branch is **published at creation** and every gated commit is pushed, so
+  remote state = approved tasks. Invariant at every task boundary (this is what makes `/clear` always
+  safe): feature-branch commits = approved tasks, working tree = the task in flight, `progress.md` =
+  the cursor. Relies on nested sub-agents; degrades to inline if the harness disables them. When
+  every task is checked it runs the full suite + the whole-feature integration review — the seam
+  **and** security gate no single task diff can be — then offers the FF-merge, then asks about
+  cleanup (worktree, branch, docs).
+- **`/review-task`** — the locked gate: an **execute-first precondition** (per-task: the scoped
+  verify; integration: the FULL suite — red = auto-FAIL), then cross-model rubric review (Claude
+  self + codex) plus a specialist **security** pass (`--integration` only — security is a
+  whole-surface property) and a **leanness** pass, over a task's diff — or, with `--integration
+  <base>`, the whole feature, to catch the cross-task contract drift and whole-surface security
+  issues no single task diff shows. The rubric's test-audit judges test *quality* (filler tests,
+  mutation reasoning, right level), not counts.
 
 ## What's here
 
@@ -62,6 +69,7 @@ lives a level down, so the main thread stays lean.
 | `reference/leanness.md` | the YAGNI ladder (implement) + over-engineering review axis |
 | `reference/security-review.md` | the security review axis — FP discipline + auth-bypass catalog + triage + per-tech highlights (adapted from deepsec) |
 | `templates/{plan,progress}.md` | the plan checklist + the resume cursor |
+| `skills/flow-report/` | companion skill: export any subject (plan, module, flow, diff) as a self-contained HTML report of high-level flow/state diagrams — for plan/refine/review conversations |
 | `bootstrap.sh` | symlinks the active loop into `~/.claude` |
 | `archive/superseded-drivers/` | the shelved manual + JS-Workflow drivers, with restore instructions |
 | `archive/dev-loop-v2/` | the shelved v2 DAG-orchestrator loop, with its own bootstrap + ARCHIVE_NOTE |

@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dev-loop workflow — flow report</title>
+<style>
+  /* IMC Blue Design System tokens (claude.ai/design project ad736cbc — analyticsportalui-ts).
+     Light is default; dark swaps via prefers-color-scheme. */
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Inter:wght@300..700&display=swap');
+  :root {
+    --background: #f5f8fc;
+    --card: #ffffff;
+    --foreground: #0f172a;
+    --muted-foreground: #64748b;
+    --secondary: #eaf1f8;
+    --border: #e1e8f1;
+    --primary: #0284c7;          /* IMC Blue */
+    --accent-foreground: #0063bf;
+    --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04);
+    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    --font-display: 'Fraunces', ui-serif, Georgia, serif;
+    --create: #2f8f46;           /* success */
+    --changed: #0284c7;          /* primary */
+    --risk: #e2891f;             /* warning */
+    --blocked: #cf556b;          /* destructive */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: #0a101d;
+      --card: #111b32;
+      --foreground: #e2e8f0;
+      --muted-foreground: #94a3b8;
+      --secondary: #14213b;
+      --border: #1e2a47;
+      --primary: #0ea5e9;
+      --accent-foreground: #7dd3fc;
+      --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.25);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    font: 15px/1.55 var(--font-sans);
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 40px 24px 64px; }
+  header .eyebrow {
+    color: var(--primary); font-size: 12px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin: 0 0 6px;
+  }
+  header h1 {
+    font-family: var(--font-display); font-size: 32px; font-weight: 600;
+    margin: 0 0 6px; letter-spacing: -0.01em;
+  }
+  header .subtitle { color: var(--muted-foreground); margin: 0 0 24px; }
+
+  .tiles { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 12px; }
+  .tile {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    box-shadow: var(--shadow-card); padding: 14px 18px; min-width: 150px;
+  }
+  .tile .label { color: var(--muted-foreground); font-size: 13px; }
+  .tile .value { font-family: var(--font-display); font-size: 30px; font-weight: 550; margin-top: 2px; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 28px; color: var(--muted-foreground); font-size: 13px; }
+  .legend .chip { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .swatch {
+    width: 12px; height: 12px; border-radius: 4px; border: 2px solid var(--c);
+    background: color-mix(in srgb, var(--c) 14%, transparent);
+  }
+  .legend .swatch.dashed { border-style: dashed; }
+
+  section.card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    box-shadow: var(--shadow-card); padding: 20px 24px 16px; margin: 0 0 24px;
+  }
+  section.card h2 { font-family: var(--font-display); font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  section.card .caption { color: var(--muted-foreground); margin: 0 0 12px; font-size: 14px; }
+  pre.mermaid { display: flex; justify-content: center; overflow-x: auto; margin: 0; }
+  pre.mermaid:not([data-processed]) { color: var(--muted-foreground); font-size: 12px; }
+  details { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 8px; }
+  details summary { color: var(--muted-foreground); font-size: 12.5px; cursor: pointer; }
+  details pre { color: var(--muted-foreground); font-size: 12.5px; overflow-x: auto; }
+
+  .questions {
+    background: var(--secondary); border-left: 3px solid var(--risk);
+    border-radius: 0 12px 12px 0; padding: 12px 16px; margin: 0 0 24px;
+  }
+  .questions h2 { font-family: var(--font-display); font-size: 17px; font-weight: 600; margin: 0 0 6px; }
+  .questions ul { margin: 0; padding-left: 18px; }
+  .questions li { margin: 4px 0; }
+
+  .offline-banner, .diagram-error {
+    border: 1px solid var(--risk); border-radius: 12px; padding: 10px 14px;
+    color: var(--muted-foreground); font-size: 13.5px; margin: 0 0 16px;
+  }
+  .offline-banner { display: none; }
+
+  footer { color: var(--muted-foreground); font-size: 12.5px; margin-top: 8px; }
+
+  @media print {
+    body { background: #fff; }
+    section.card { break-inside: avoid; box-shadow: none; }
+    details, .offline-banner { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">Flow report</p>
+    <h1>dev-loop workflow</h1>
+    <p class="subtitle">subject: the claude-config execution loop · purpose: review (2026-07-01 hardening) · sources: commands/{plan-feature,dev-loop,review-task}.md, agents/dev-loop-orchestrator.md</p>
+  </header>
+
+  <div class="tiles">
+    <div class="tile"><div class="label">Planner pauses</div><div class="value">4</div></div>
+    <div class="tile"><div class="label">Review axes</div><div class="value">4</div></div>
+    <div class="tile"><div class="label">Fix-cycle cap</div><div class="value">2</div></div>
+    <div class="tile"><div class="label">Safeguards added today</div><div class="value">6</div></div>
+  </div>
+
+  <div class="legend">
+    <span class="chip"><span class="swatch dashed" style="--c:var(--create)"></span>added today</span>
+    <span class="chip"><span class="swatch" style="--c:var(--changed)"></span>changed today</span>
+  </div>
+
+  <div class="offline-banner" id="offline">
+    Diagrams need the Mermaid CDN once (network). Offline right now — the raw diagram
+    sources are expanded below each section instead.
+  </div>
+
+  <section class="card">
+    <h2>The pipeline, end to end</h2>
+    <p class="caption">What to look at: the loop no longer ships on review alone — the feature branch is published at creation, the integration step runs the full suite before reviewers, and the merge now has a cleanup tail.</p>
+    <pre class="mermaid">
+flowchart TD
+    subgraph pf["/plan-feature — pauses for approval after each stage"]
+        direction LR
+        align["Align"] --> ground["Ground, now pins Verify commands"] --> spec["Spec"] --> slice["Slice"]
+    end
+    pf --> plan[("plan.md + progress.md")]
+    plan --> dl
+    subgraph dl["/dev-loop"]
+        direction LR
+        pub["worktree + publish branch"] --> loop{{"main-thread loop"}}
+        loop -->|"spawn, one per task"| orch["orchestrator agent"]
+        orch -->|"one-line result"| loop
+        loop -->|"all tasks checked"| integ["FULL suite run + integration review, seams + security"]
+    end
+    dl -->|"FAIL: add fix tasks"| plan
+    dl -->|"PASS + explicit OK"| ff["FF-merge"]
+    ff --> clean["cleanup ask: worktree, branch, docs"]
+    classDef create fill:#2f8f4622,stroke:#2f8f46,stroke-width:2px,stroke-dasharray:5 3
+    classDef changed fill:#0284c722,stroke:#0284c7,stroke-width:2px
+    class pub,clean create
+    class ground,integ changed
+    </pre>
+    <details><summary>diagram source (offline fallback)</summary><pre>
+flowchart TD
+    subgraph pf["/plan-feature — pauses for approval after each stage"]
+        direction LR
+        align["Align"] --> ground["Ground, now pins Verify commands"] --> spec["Spec"] --> slice["Slice"]
+    end
+    pf --> plan[("plan.md + progress.md")]
+    plan --> dl
+    subgraph dl["/dev-loop"]
+        direction LR
+        pub["worktree + publish branch"] --> loop{{"main-thread loop"}}
+        loop -->|"spawn, one per task"| orch["orchestrator agent"]
+        orch -->|"one-line result"| loop
+        loop -->|"all tasks checked"| integ["FULL suite run + integration review, seams + security"]
+    end
+    dl -->|"FAIL: add fix tasks"| plan
+    dl -->|"PASS + explicit OK"| ff["FF-merge"]
+    ff --> clean["cleanup ask: worktree, branch, docs"]
+    classDef create fill:#2f8f4622,stroke:#2f8f46,stroke-width:2px,stroke-dasharray:5 3
+    classDef changed fill:#0284c722,stroke:#0284c7,stroke-width:2px
+    class pub,clean create
+    class ground,integ changed
+    </pre></details>
+  </section>
+
+  <section class="card">
+    <h2>One task inside the orchestrator</h2>
+    <p class="caption">What to look at: the new Verify state actually EXECUTES the repo's tests before any reviewer reads the diff — a red verify never enters the gate — and a clear commit now pushes to the published branch.</p>
+    <pre class="mermaid">
+stateDiagram-v2
+    state "Commit + push" as CommitPush
+    [*] --> Orient
+    Orient --> Implement: first unchecked task
+    Orient --> Done: none remain
+    Implement --> Verify: unstaged diff
+    Verify --> Gate: green, tests actually ran
+    Verify --> Blocked: red after 2 attempts
+    Gate --> CommitPush: PASS
+    Gate --> Fix: FAIL
+    Fix --> Verify: max 2 gate cycles
+    CommitPush --> [*]: APPROVED, checkpoint on disk
+    Blocked --> [*]: driver stops, human decides
+    Done --> [*]
+    classDef create fill:#2f8f4622,stroke:#2f8f46,stroke-width:2px,stroke-dasharray:5 3
+    classDef changed fill:#0284c722,stroke:#0284c7,stroke-width:2px
+    class Verify create
+    class CommitPush changed
+    </pre>
+    <details><summary>diagram source (offline fallback)</summary><pre>
+stateDiagram-v2
+    state "Commit + push" as CommitPush
+    [*] --> Orient
+    Orient --> Implement: first unchecked task
+    Orient --> Done: none remain
+    Implement --> Verify: unstaged diff
+    Verify --> Gate: green, tests actually ran
+    Verify --> Blocked: red after 2 attempts
+    Gate --> CommitPush: PASS
+    Gate --> Fix: FAIL
+    Fix --> Verify: max 2 gate cycles
+    CommitPush --> [*]: APPROVED, checkpoint on disk
+    Blocked --> [*]: driver stops, human decides
+    Done --> [*]
+    classDef create fill:#2f8f4622,stroke:#2f8f46,stroke-width:2px,stroke-dasharray:5 3
+    classDef changed fill:#0284c722,stroke:#0284c7,stroke-width:2px
+    class Verify create
+    class CommitPush changed
+    </pre></details>
+  </section>
+
+  <section class="card">
+    <h2>Who talks to whom</h2>
+    <p class="caption">What to look at: the driver still only sees one-line results; verify and push live inside the orchestrator, and the specialist security reviewer joins only at the integration step.</p>
+    <pre class="mermaid">
+sequenceDiagram
+    participant U as user
+    participant D as dev-loop driver
+    participant O as orchestrator
+    participant R as review gate
+    U->>D: /dev-loop feature
+    D->>D: ensure worktree, publish branch
+    loop one fresh agent per unchecked task
+        D->>O: brief with seam map + locked decisions
+        O->>O: implement, lean mode, unstaged
+        O->>O: verify — RUN the tests, red never enters review
+        O->>R: locked gate on the diff
+        R-->>O: VERDICT PASS or FAIL, max 2 fix cycles
+        O->>O: commit + tick plan + rewrite progress, then push
+        O-->>D: ORCHESTRATOR RESULT, one line
+    end
+    D->>D: FULL test suite, red = FAIL
+    D->>R: integration review, adds security axis
+    R-->>D: PASS
+    D->>U: show log, wait for explicit FF OK
+    U->>D: OK
+    D->>U: FF-merge, then ask about cleanup
+    </pre>
+    <details><summary>diagram source (offline fallback)</summary><pre>
+sequenceDiagram
+    participant U as user
+    participant D as dev-loop driver
+    participant O as orchestrator
+    participant R as review gate
+    U->>D: /dev-loop feature
+    D->>D: ensure worktree, publish branch
+    loop one fresh agent per unchecked task
+        D->>O: brief with seam map + locked decisions
+        O->>O: implement, lean mode, unstaged
+        O->>O: verify — RUN the tests, red never enters review
+        O->>R: locked gate on the diff
+        R-->>O: VERDICT PASS or FAIL, max 2 fix cycles
+        O->>O: commit + tick plan + rewrite progress, then push
+        O-->>D: ORCHESTRATOR RESULT, one line
+    end
+    D->>D: FULL test suite, red = FAIL
+    D->>R: integration review, adds security axis
+    R-->>D: PASS
+    D->>U: show log, wait for explicit FF OK
+    U->>D: OK
+    D->>U: FF-merge, then ask about cleanup
+    </pre></details>
+  </section>
+
+  <div class="questions">
+    <h2>Open questions</h2>
+    <ul>
+      <li><strong>Mutation tooling stays advisory-only</strong> — the rubric's mutation <em>reasoning</em> is the actual gate. Revisit as a real tooling gate only if filler tests still slip through.</li>
+      <li><strong>Tests-quality signal depends on the gate reviewers</strong> — the new Test-audit criteria are prompts, not lint rules; watch a few gated tasks to confirm they bite.</li>
+    </ul>
+  </div>
+
+  <footer>Generated by flow-report · IMC Blue · point-in-time snapshot — regenerate rather than edit.</footer>
+</main>
+
+<script type="module">
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  try {
+    const { default: mermaid } = await import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs");
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: "base",
+      themeVariables: dark ? {
+        background: "#111b32", primaryColor: "#14213b", primaryTextColor: "#e2e8f0",
+        primaryBorderColor: "#94a3b8", lineColor: "#94a3b8", secondaryColor: "#14213b",
+        tertiaryColor: "#0e2233", fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif",
+      } : {
+        background: "#ffffff", primaryColor: "#eaf1f8", primaryTextColor: "#0f172a",
+        primaryBorderColor: "#64748b", lineColor: "#64748b", secondaryColor: "#eaf1f8",
+        tertiaryColor: "#e1f0fb", fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif",
+      },
+    });
+    for (const el of document.querySelectorAll("pre.mermaid")) {
+      try {
+        await mermaid.run({ nodes: [el] });
+      } catch (e) {
+        el.outerHTML = `<div class="diagram-error">Diagram failed to render: ${e.message ?? e}</div>`;
+      }
+    }
+  } catch {
+    document.getElementById("offline").style.display = "block";
+    document.querySelectorAll("details").forEach((d) => (d.open = true));
+    document.querySelectorAll("pre.mermaid").forEach((p) => (p.style.display = "none"));
+  }
+</script>
+</body>
+</html>

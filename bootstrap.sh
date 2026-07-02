@@ -28,6 +28,12 @@ link reference/security-review.md  reference/security-review.md
 link templates/plan.md             templates/plan.md
 link templates/progress.md         templates/progress.md
 
+# --- companion skills ---------------------------------------------------------------
+link skills/flow-report            skills/flow-report
+
+command -v codex >/dev/null 2>&1 || echo "WARNING: codex CLI not found — /review-task's cross-model \
+reviewer (Reviewer B) will run DEGRADED (single-model) until codex is installed + authed." >&2
+
 echo
 echo "Active loop linked: /plan-feature (align→ground→spec→slice) + /dev-loop (orchestrator-per-task,"
 echo "  via the dev-loop-orchestrator agent) + /review-task (cross-model + security + leanness gate)."

@@ -17,6 +17,8 @@
 - **Write-set + blast radius**: <files touched, and the untouched code that composes with them>
 - **Twins**: <every parallel path — UI vs headless, success/failure/budget/cancel, repo↔repo>
 - **Reused-contract semantics**: <existing contracts reused, with their REAL current meaning>
+- **Verify commands**: <exact build/test commands for this repo — /dev-loop executes these
+  every task; full suite runs at integration review>
 
 ## Tasks
 <Each task = a vertical-slice tracer bullet: a thin path through every layer it touches,

@@ -33,9 +33,18 @@ MUST-NOTs**, and verify each against the diff. A requirement asked-for-but-missi
 added that nobody asked for (scope creep), is a finding. A code comment that contradicts the
 code is a Critical tell.
 
-**Test-audit (green ≠ correct)** — a passing test that asserts the *current/buggy* state instead
-of the *planned* contract, or that skips a branch the slice introduces (error / recoverable /
-edge), is a FAIL, not a pass. New logic with no test that actually exercises it is a finding.
+**Test-audit (green ≠ correct, count ≠ coverage)** — a passing test that asserts the
+*current/buggy* state instead of the *planned* contract, or that skips a branch the slice
+introduces (error / recoverable / edge), is a FAIL, not a pass. New logic with no test that
+actually exercises it is a finding. Then judge the tests' **quality**, not their count:
+- **Filler tests are findings, not coverage** — tautologies (`expect(true)`), asserting a mock
+  you just configured, snapshot-everything, near-duplicates that inflate the count. Every test
+  must assert observable behavior at a contract, not implementation detail.
+- **Mutation reasoning** — take the 1–3 riskiest logic points in the diff and ask: *if this
+  operator/branch were flipped or this line deleted, which test fails?* If the answer is "none",
+  that logic is untested no matter what coverage says — Important.
+- **Right level** — unit vs integration per what the slice's acceptance criteria need; a seam
+  crossing tested only with mocks on both sides is untested *at the seam*.
 
 **Convention / standards** — deviates from this repo's documented standards or the plan's
 patterns (naming, structure, error handling, libraries). Read neighboring code before judging.

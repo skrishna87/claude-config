@@ -55,6 +55,9 @@ codebase. Concretely, produce:
    is the most common seam bug.
 5. **Reused-contract semantics** — for any existing contract the feature reuses (status code,
    enum, queue message, return shape), the *actual current* semantics read at the source.
+6. **Verify commands** — the exact command(s) that build and test this repo, read from
+   package.json / Makefile / CI config / docs — grounded, not guessed. `/dev-loop`'s
+   execute-verify step runs these on every task, so a wrong command here silently disables it.
 
 **PAUSE.** Present the seam map + anything that surprised you (a symbol that wasn't where the
 plan assumed, a twin nobody mentioned, a contract that means something different than expected).
@@ -112,7 +115,15 @@ correct? anything to merge or split?* Iterate until approved.
 ## Done
 
 When the slices are approved, plan.md is complete. Create `docs/<feature>/progress.md` from
-`~/.claude/templates/progress.md` (all tasks unchecked, worktree fields blank). Tell the user:
+`~/.claude/templates/progress.md` (all tasks unchecked, worktree fields blank).
+
+Then ask ONE last question: *"Should these tasks be tracked anywhere outside plan.md — whatever
+this project uses (issue tracker, board, ticket system)?"* Tools vary per project, so don't
+assume one. If yes, mirror the slices there with whatever tooling is available and record the
+linkage (URLs/ids) in plan.md next to each task — **plan.md stays the source of truth** for
+`/dev-loop`; the tracker is a mirror. If no, move on.
+
+Tell the user:
 
 `Plan ready — docs/<feature>/plan.md (<n> tasks). Run /dev-loop <feature> to start building.`
 

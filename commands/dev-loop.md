@@ -34,7 +34,8 @@ and the manual driver are archived and restorable under `archive/superseded-driv
 context-isolated, so they lean hard on the plan). Missing `progress.md` → seed from the template.
 
 ## 0. Orient
-- Resolve `<feature>` from `$ARGUMENTS`, else auto-detect from `docs/*/progress.md` with unfinished items.
+- Resolve `<feature>` from `$ARGUMENTS`, else auto-detect from `docs/*/progress.md` with unfinished
+  items. **If more than one matches, list them and ask which — never guess.**
 - Read `docs/<feature>/plan.md` + `docs/<feature>/progress.md`.
 - Reconstruct from git, not memory: `git -C <worktree> log --oneline <base>..HEAD` + `git -C <worktree>
   status`. If a task is mid-flight (uncommitted changes), the first orchestrator will finish/gate THAT
@@ -45,6 +46,9 @@ Work in `.worktrees/<repo>/<branch>` at the mono root, branched off
 source. Resuming → reuse the recorded worktree/branch. Creating → `git -C <subrepo> worktree add
 <mono-root>/.worktrees/<repo>/<branch> -b <branch> <source>`; copy gitignored `.env`; recreate `.venv`
 (`rm -rf .venv && uv sync`) if present; record worktree path + base sha + source in progress.md.
+**Publish the branch** so every gated step is backed up remotely: `git -C <worktree> push -u
+<remote> <branch>` when the sub-repo has a remote (record `Published: <remote>/<branch>` in
+progress.md; no remote → record `Published: no` and continue — orchestrators then skip pushing).
 
 ## 2. Gather the brief (once)
 From `plan.md`, extract the **`## Seam map`** text and **`## Locked decisions`** text. Note the
@@ -68,20 +72,27 @@ Repeat until the plan has no unchecked tasks (or an orchestrator returns BLOCKED
      relaunches `/dev-loop`. Do NOT continue past a block — a later task likely
      depends on it.
    - If `coverage: DEGRADED`, record it; report loudly at the end (codex was down → single-model).
+   - If `verify: NONE` (no runnable test command found), record it; if it's NONE on every task,
+     surface that loudly — the whole feature is shipping on review alone.
 3. Keep your own per-iteration footprint minimal: trust the orchestrator's result + the on-disk state;
    you do not need to re-read the whole diff each loop.
 
 ## 4. Integration review + hand off
 When every checklist item is checked, run the **whole-feature** integration review — the seam **and
 security** gate no single task diff can be (the specialist security axis, Reviewer C, runs *here*,
-not in the per-task orchestrator gate — security is a whole-surface property). Either spawn one
-orchestrator-style reviewer or follow `~/.claude/commands/review-task.md` with `--integration <base>`
-(scope = `git diff <base>...HEAD`).
+not in the per-task orchestrator gate — security is a whole-surface property). **Run the FULL test
+suite in the worktree first** (the plan's Verify commands) — a red suite is a FAIL before any
+reviewer spends a token. Then either spawn one orchestrator-style reviewer or follow
+`~/.claude/commands/review-task.md` with `--integration <base>` (scope = `git diff <base>...HEAD`).
 - **FAIL** → seams don't hold. Surface the blockers, add fix tasks to `plan.md` (unchecked), keep
   looping (back to step 3). Do NOT offer to merge.
 - **PASS** → STOP. Summarize, show `git -C <worktree> log --oneline <base>..HEAD`, and tell the user:
   do your final review / manual test; on your confirmation I'll fast-forward `<branch>` onto `<source>`
   (and push if you want). **Never FF or push without explicit confirmation.**
+- **After the confirmed FF** — ask about cleanup (never do it unprompted): remove the worktree
+  (`git worktree remove`), delete the feature branch local + published remote, and mark
+  `docs/<feature>/progress.md` shipped (or archive `docs/<feature>/`). Do exactly what the user
+  picks, nothing more.
 
 ## Notes
 - **Locked gate**: orchestrators use ONLY `~/.claude/commands/review-task.md` + the rubric — no other
