@@ -46,6 +46,16 @@ done and gated either way — delegation is an optimization, not a requirement. 
    symbols / write-set / twins; compose correctly with the Seam map; honor the Locked decisions.
    Leave changes **unstaged** (do not commit yet).
 
+   **Hand the implementer `rubricPath` too** — it must know the bar it will be gated against, not
+   discover it via a FAIL. And require it to END its work with a **pre-gate self-check** (fix
+   anything it finds before returning; the map is returned to you, not committed):
+   - **Acceptance-evidence map** — each acceptance clause of THIS task → the test name / command
+     output that proves it. An unmapped clause = not done; write the missing test/behavior now.
+     (Most preventable gate FAILs are an acceptance clause with no test pinning it.)
+   - **Semantics audit** — one line confirming the diff was re-checked against the plan's
+     "Reused-contract semantics" / sentinel-value / zero-vs-null notes and the progress.md Gotchas.
+     These are documented traps; a gate finding on one of them is a wasted cycle.
+
 3. **Verify — execute, don't just review.** Resolve the verify command(s): plan.md's **Verify
    commands** line, else progress.md Gotchas, else detect (package.json `test` script, pytest /
    `uv run pytest`, `cargo test`, `go test ./...`, `make test`). Run them in the worktree — scope
@@ -66,6 +76,18 @@ done and gated either way — delegation is an optimization, not a requirement. 
 5. **Fix loop (≤2 cycles).** If the gate FAILs, delegate/run a fix for the blocking findings,
    re-run verify (step 3), then re-gate. Bounded at **2** fix→review cycles. Still failing → go to
    step 7 as BLOCKED.
+   - **Snapshot the failed diff BEFORE fixing**: `git -C "<worktree>" diff >
+     "<worktree>/.dev-loop/review-cycle-<n>.diff"` (`.dev-loop/` is already git-excluded by the
+     gate's §1 setup). Post-fix `git diff` shows the whole task again — this snapshot is the only
+     way the re-gate can isolate what the fix changed.
+   - **Re-gate SCOPED, not from scratch**: invoke the gate in its re-review mode (`--re-review`,
+     see `reviewGatePath`) passing the prior verdict's blocking findings AND the snapshot path —
+     reviewers verify each finding is resolved and scan only the fix's hunks (current diff vs
+     snapshot), no full re-litigation.
+   - **Record the lesson**: classify the cycle's cause (`missing-test | semantics | design |
+     style`) and append a one-line `Gate lesson (task <n>):` entry to the progress.md Gotchas in
+     step 6 — you are fresh-context per task, so this line is the ONLY way the next task's
+     implementer inherits it.
 
 6. **Commit + checkpoint + push (on PASS).** In ONE commit on the feature branch:
    - tick this task's checkbox in `planPath` (`- [ ]` → `- [x]`, match the number),
@@ -86,6 +108,8 @@ ORCHESTRATOR RESULT
   commit: <sha | ->
   verify: PASS <cmd> | FAIL | NONE
   coverage: CROSS-MODEL | DEGRADED | -
+  cycles: <0 | 1 | 2 — gate fix→review cycles used>
+  cycle-cause: <missing-test | semantics | design | style | - (when cycles: 0)>
   remaining: <count of still-unchecked tasks AFTER this one>
   blocking: <"; "-joined Critical/Important findings, or "none">
   notes: <delegated|inline; pushed|push-failed|unpublished; anything the driver/human should know>

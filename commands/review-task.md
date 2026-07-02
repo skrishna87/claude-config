@@ -1,6 +1,6 @@
 ---
 description: Locked review gate — cross-model rubric review (Claude self + codex) plus dedicated security and leanness passes, over a task's diff or a whole feature. The ONLY reviewer /dev-loop uses.
-argument-hint: "[repo/worktree path] [--integration <base-ref> for a whole-feature review]"
+argument-hint: "[repo/worktree path] [--integration <base-ref> for a whole-feature review] [--re-review after a fix cycle, with the prior blocking findings]"
 ---
 
 # /review-task — locked review gate
@@ -23,7 +23,19 @@ reviewers judge the SAME diff by the SAME rubric; you consolidate.
   - **Integration (`--integration <base>`)** — the **whole feature** so far, to catch
     cross-task contract drift and composition bugs no single task diff shows.
     Diff: `git -C "$REPO" diff <base>...HEAD` (three-dot, against the merge-base).
-- `$ARGUMENTS` may override `$REPO` or pass `--integration <base>`.
+  - **Re-review (`--re-review`)** — a fix-cycle re-gate. The caller passes the prior verdict's
+    blocking findings AND the **pre-fix diff snapshot** (the diff as it stood when the failing
+    review ran, saved by the orchestrator at FAIL time, e.g. `$REPO/.dev-loop/review-cycle-0.diff`);
+    a full first-pass review already happened. Post-fix `git diff` shows the whole task again, so
+    the **fix delta = current diff vs the snapshot** — hunks present now that aren't in the
+    snapshot (or changed from it) are the fix. Reviewers do exactly two things: (1) verify each
+    blocking finding is actually resolved (not merely moved), (2) scan the fix delta for
+    regressions it introduced. **No full re-litigation of unchanged code, and no new findings
+    from it** — a finding in untouched-since-cycle-0 code was either visible in the first pass (too
+    late, it had its chance) or belongs to the integration review. If the caller supplied no
+    snapshot, say so in the verdict and fall back to the full diff for check (2) — never silently
+    pretend the scope was narrow. Verdict format is unchanged.
+- `$ARGUMENTS` may override `$REPO` or pass `--integration <base>` / `--re-review`.
 - **Make the plan readable INSIDE `$REPO` (the context mirror).** The plan/progress usually live at
   the mono root (`docs/<feature>/{plan,progress}.md`), which a reviewer running `-C "$REPO"` — and
   **especially codex in its read-only sandbox** — cannot reach. Mirror them into the worktree
@@ -62,6 +74,11 @@ Static review can't see a test that doesn't run. Resolve the verify command(s) �
   survivors into Test-audit as advisory findings — never blocking, never install tooling for this.
 
 ## 4. Run the reviewers (in parallel)
+
+In `--re-review` mode, prepend the prior blocking findings to BOTH reviewer prompts, plus the
+snapshot path (`$REPO`-relative, so codex's sandbox can read it) and the §1 re-review instruction
+(verify resolution + scan the fix delta vs the snapshot only) in place of the full-pass
+instruction; Reviewer D (leanness) is skipped — its advisory verdict from the first pass stands.
 
 **Reviewer A — Claude (self):** dispatch a `general-purpose` subagent with the rubric, the diff,
 and the worktree-local plan at `$REPO/.dev-loop/plan.md` (tell it to READ that file for the seam

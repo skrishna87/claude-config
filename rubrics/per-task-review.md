@@ -67,8 +67,13 @@ Bucket every finding:
 - **Important** — real bug/risk, a plan MUST-NOT violated, or a clear convention violation.
 - **Minor** — style, naming, nice-to-have test; non-blocking.
 
-Format each as one line: `SEVERITY: file:line — problem — suggested fix`, grouped by the check
-it came from (so a passing section never masks a failing one).
+**A Critical or Important must carry a concrete failure scenario** — the input/state that
+produces the wrong outcome (`given X, Y happens instead of Z`), or for a missing test, the
+specific acceptance clause / mutation that nothing would catch. If you cannot state one, the
+finding is a Minor. Blocking verdicts cost a full fix→review cycle; vague unease doesn't buy one.
+
+Format each as one line: `SEVERITY: file:line — problem — failure scenario — suggested fix`,
+grouped by the check it came from (so a passing section never masks a failing one).
 
 If nothing material is wrong, say so plainly. Do NOT invent issues to look thorough; do NOT
 rubber-stamp. End with exactly one line:

@@ -1,12 +1,12 @@
 ---
-description: Turn a rough feature idea into a grounded, slice-ready plan.md — align, ground against the codebase, spec, then slice. Pauses for your approval between each stage. Feeds /dev-loop.
+description: Turn a rough feature idea into a grounded, slice-ready plan.md — align, ground against the codebase, spec, slice, then a cross-model adversarial gate on the finished plan. Pauses for your approval between each stage. Feeds /dev-loop.
 argument-hint: "<feature-name> + a sentence or two on what you want"
 disable-model-invocation: true
 ---
 
-# /plan-feature — align, ground, spec, slice
+# /plan-feature — align, ground, spec, slice, gate
 
-Produce `docs/<feature>/plan.md`: the checklist `/dev-loop` executes. Four stages, and you
+Produce `docs/<feature>/plan.md`: the checklist `/dev-loop` executes. Five stages, and you
 **stop at the end of each one for approval** before the next begins. Never run two stages
 without a checkpoint — the whole point is to catch a wrong turn while it's cheap.
 
@@ -49,13 +49,21 @@ codebase. Concretely, produce:
    grep-verified `file:line`. Anything you can't pin doesn't exist yet → it becomes an explicit
    "create X" task, flagged here.
 3. **Write-set + blast radius** — the files the change touches, and the untouched code that
-   *composes* with them (queues, replay, retry, the other side of a contract).
+   *composes* with them (queues, replay, retry, the other side of a contract). For every
+   **existing** function/method the plan modifies, list **ALL its call sites** — every caller
+   is in the blast radius. A shared code path (one service behind two handlers) silently leaks
+   the change into flows the feature never meant to touch; either scope the change or add each
+   extra caller to the write-set and tests.
 4. **Twins** — every parallel path the feature touches (UI vs headless, success/failure/budget/
    cancel branches, two repos sharing one contract). A change to one twin that misses another
    is the most common seam bug.
 5. **Reused-contract semantics** — for any existing contract the feature reuses (status code,
    enum, queue message, return shape), the *actual current* semantics read at the source.
-6. **Verify commands** — the exact command(s) that build and test this repo, read from
+6. **Endpoint auth reach** — for every endpoint added or touched: the permission guard on its
+   route (grep-verified, named) and **what set of callers it actually admits**. "It has a
+   guard" isn't grounding — if a broadly-permitted role can reach the new surface, or probe
+   state through its responses (409-vs-200 oracles), the plan must scope it explicitly.
+7. **Verify commands** — the exact command(s) that build and test this repo, read from
    package.json / Makefile / CI config / docs — grounded, not guessed. `/dev-loop`'s
    execute-verify step runs these on every task, so a wrong command here silently disables it.
 
@@ -112,9 +120,64 @@ correct? anything to merge or split?* Iterate until approved.
 
 ---
 
+## Stage 5 — Adversarial gate (cross-model)
+
+The plan is the **root of trust** for `/dev-loop`: every context-isolated orchestrator and
+reviewer judges against it, so a plan bug propagates into N task implementations and resurfaces
+as fix cycles or an integration blocker. Stage 2's grounding is verified by the same model that
+wrote it — this gate is the independent check, same reason the review gate is cross-model. It
+runs on the **complete** plan (after slicing) because the expensive misses live in the tasks
+and acceptance criteria, not just the seam map.
+
+For **each repo in the plan's write-set** (usually one; a cross-repo feature has one pass per
+side): mirror the plan into the repo so codex's `-C "$REPO"` sandbox can read it. This is the
+plan-only variant of `/review-task` §1's mirror — do NOT copy that block verbatim: `progress.md`
+doesn't exist yet at planning time (it's created at Done).
+
+```bash
+mkdir -p "$REPO/.dev-loop"
+EXCL="$(git -C "$REPO" rev-parse --git-common-dir)/info/exclude"
+grep -qxF '.dev-loop/' "$EXCL" 2>/dev/null || echo '.dev-loop/' >> "$EXCL"
+cp "<abs>/docs/<feature>/plan.md" "$REPO/.dev-loop/plan.md"
+```
+
+Then:
+
+```bash
+codex exec -C "$REPO" -s read-only -o /tmp/codex-plan-review.md \
+  "Review the feature plan at .dev-loop/plan.md against THIS repo's actual code. There is no
+diff yet — you are auditing whether the plan is grounded, before implementation. Check, with
+file:line evidence for every claim:
+1. Every symbol/endpoint/flag the plan pins resolves where the plan says it does.
+2. For every existing function the plan modifies: find ALL call sites. Does the plan account
+   for each caller, or does a shared path leak the change into flows the plan never mentions?
+3. For every endpoint added or touched: what permission guard is on the route, and what
+   callers does it actually admit? Could a permitted-but-unintended caller reach the new
+   surface, or probe state through its responses?
+4. Reused-contract semantics: do the plan's claims about status codes / sentinels /
+   zero-vs-nil / return shapes match what the code actually does at the source?
+5. Overclaiming acceptance criteria: does any criterion assert behavior the referenced code
+   doesn't have (extra filters, side conditions, different semantics)?
+6. Check-then-act placement: is any enforcement the plan adds separated from the write it
+   guards by a transaction boundary, and does the plan say whether that race is accepted?
+Report each finding as High/Medium/Low with file:line and what the plan should say instead.
+If the plan is sound, say so plainly — do not invent findings."
+```
+
+Then **adjudicate**: verify each finding against the code yourself before acting — codex can
+be wrong too (the `/review-task` §5 disagreement discipline applies). Fix the plan for every
+confirmed finding. There is **no fix-cycle budget here** — plan fixes are markdown edits, so
+just fix and move on; run ONE confirmation re-pass only if a High finding forced re-slicing.
+If codex is unavailable, proceed but say so loudly at Done — the plan ships single-model.
+
+**PAUSE.** Present the findings and how each was resolved (or refuted, with evidence).
+Ask: *"Gate findings resolved to your satisfaction?"* Wait for go.
+
+---
+
 ## Done
 
-When the slices are approved, plan.md is complete. Create `docs/<feature>/progress.md` from
+When the slices are approved and the gate findings resolved, plan.md is complete. Create `docs/<feature>/progress.md` from
 `~/.claude/templates/progress.md` (all tasks unchecked, worktree fields blank).
 
 Then ask ONE last question: *"Should these tasks be tracked anywhere outside plan.md — whatever
