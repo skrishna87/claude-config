@@ -74,6 +74,9 @@ Repeat until the plan has no unchecked tasks (or an orchestrator returns BLOCKED
    - If `coverage: DEGRADED`, record it; report loudly at the end (codex was down → single-model).
    - If `verify: NONE` (no runnable test command found), record it; if it's NONE on every task,
      surface that loudly — the whole feature is shipping on review alone.
+   - Record `cycles` + `cycle-cause` per task (a running `task N: cycles=X (cause)` list is enough).
+     In the end-of-run summary, report the totals — and if the same cause recurs (e.g. `missing-test`
+     twice), call it out: that's a systematic implementer gap to fix in the prompts, not noise.
 3. Keep your own per-iteration footprint minimal: trust the orchestrator's result + the on-disk state;
    you do not need to re-read the whole diff each loop.
 
