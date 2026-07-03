@@ -39,6 +39,7 @@ flowchart TD
 | `templates/` | `plan.md` checklist + `progress.md` cursor |
 | `skills/flow-report/` | export any plan/flow/diff as a self-contained HTML diagram report |
 | `codex/` + `bootstrap-codex.sh` | the planner, ported to Codex's skill model |
+| `opencode/` + `bootstrap-opencode.sh` | the full workflow, rewritten for opencode: `/plan-feature` + `/dev-loop` (flat driver — no nested agents) + `/review-task`; cross-model gates are subagents pinned to another provider (`plan-gate`, `task-reviewer-cross`), no CLI shell-out |
 | `archive/` | superseded drivers (manual, JS-Workflow, v2 DAG) — restorable |
 
 ## Setup
@@ -47,6 +48,7 @@ flowchart TD
 git clone <this-repo> ~/projects/claude-config
 ~/projects/claude-config/bootstrap.sh        # per-file symlinks into ~/.claude
 ~/projects/claude-config/bootstrap-codex.sh  # optional: planner for Codex
+~/projects/claude-config/bootstrap-opencode.sh  # optional: full workflow for opencode (check the pinned models)
 ```
 
 ## Credits
