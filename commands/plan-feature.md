@@ -16,6 +16,17 @@ see. Stage 2 exists to kill those before they're written down.
 
 Resolve `<feature>` and the rough intent from `$ARGUMENTS`. Create `docs/<feature>/` if needed.
 
+## Sizing — is the full flow worth it here?
+
+Before Stage 1, size the feature and say so out loud. Five pauses + the loop pay for themselves
+on multi-slice, multi-day features; on a small change they cost more than they save. If the
+feature looks like **≤2 slices, one seam, one repo, no auth/contract surface**, recommend the
+lightweight path: merge Stages 1–2 into a single pass with ONE pause, skip Stage 5 (the gate
+audits plan-bug propagation across N isolated tasks — a 2-task plan doesn't have that risk
+unless it touches auth or a reused contract), and note that plain plan mode + `/review-task`
+on the final diff may beat the loop entirely. The user picks; if they choose full anyway, run
+it. Never silently bypass stages — downgrade explicitly at the start, or not at all.
+
 ---
 
 ## Stage 1 — Align (grill)
