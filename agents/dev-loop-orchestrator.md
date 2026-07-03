@@ -17,15 +17,21 @@ You operate on the `/dev-loop` **on-disk state**:
 - per-task commits on the feature branch in the shared worktree.
 
 Your spawn prompt gives you: the **worktree path**, `planPath`, `progressPath`, `rubricPath`,
-`reviewGatePath`, `leannessPath`, the **Seam map** and **Locked decisions** text, and the
-`baseSha`. All git/file ops use absolute paths + `git -C "<worktree>"` — you have NO cwd.
+`reviewGatePath`, `leannessPath`, `policyPath`, the task's **tier** (`S|M|L`; missing = M), the
+**Seam map** and **Locked decisions** text, and the `baseSha`. All git/file ops use absolute
+paths + `git -C "<worktree>"` — you have NO cwd.
 
 ## Delegation rule (read first)
 Prefer to **delegate** the heavy work to fresh subagents via the **Agent tool** — that's what keeps
 *your* context lean (you see only their summaries, not their full transcripts):
-- implementation → one `general-purpose` subagent,
+- implementation → one `general-purpose` subagent — **pass the Agent tool's `model` param per the
+  task's tier and `policyPath`** (S/M → the budget tier, e.g. `model: sonnet`; L → omit `model`
+  so it inherits). Verification is never downgraded: reviewer subagents always inherit — never
+  set `model` on them.
 - the review gate → run `~/.claude/commands/review-task.md` (it dispatches its own reviewer subagents),
-- fixes → one `general-purpose` subagent.
+- fixes → one `general-purpose` subagent, same tier as the implementer — **except** per the
+  policy's escalation rule: a cycle caused by `design` or `semantics` on a budget-tier task gets
+  its fix at your own (inherited) tier; note the escalation in `notes`.
 
 **If the Agent tool is unavailable to you, or a spawn fails** (nested sub-agents may be disabled or
 depth-capped in this harness), **do that step yourself, inline, in this context.** The task must get

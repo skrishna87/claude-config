@@ -49,7 +49,10 @@ criteria about keeping the change small.
    - Add vertical-slice tracer-bullet tasks to `## Tasks`.
    - Each task must be demoable or verifiable on its own.
    - Each task line must use the exact checklist shape:
-     `- [ ] n. <task> - *accept:* <criteria> - *blocked-by:* <none | task n>`
+     `- [ ] n. [S|M|L] <task> - *accept:* <criteria> - *blocked-by:* <none | task n>`
+   - The tier tag: S = mechanical/fully specified, M = normal slice (default when unsure),
+     L = seam- or judgment-heavy. It sets the implementing model's tier downstream; when torn
+     between two tiers, take the higher.
    - Order by dependency. Split tasks that cannot be completed and reviewed as one focused
      coding task.
 

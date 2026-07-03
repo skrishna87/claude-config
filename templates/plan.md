@@ -22,10 +22,11 @@
 
 ## Tasks
 <Each task = a vertical-slice tracer bullet: a thin path through every layer it touches,
-demoable on its own. Order by dependency.>
-- [ ] 1. <task> — *accept:* <criteria that prove it> — *blocked-by:* <none | task n>
-- [ ] 2. <task> — *accept:* <…> — *blocked-by:* <…>
-- [ ] 3. <task> — *accept:* <…> — *blocked-by:* <…>
+demoable on its own. Order by dependency. Tier [S|M|L] per reference/model-policy.md —
+sets the implementer's model tier; untagged = M.>
+- [ ] 1. [M] <task> — *accept:* <criteria that prove it> — *blocked-by:* <none | task n>
+- [ ] 2. [S] <task> — *accept:* <…> — *blocked-by:* <…>
+- [ ] 3. [L] <task> — *accept:* <…> — *blocked-by:* <…>
 
 ## Out of scope / deferred
 - <...>

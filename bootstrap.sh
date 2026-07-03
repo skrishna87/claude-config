@@ -25,6 +25,7 @@ link rubrics/per-task-review.md    rubrics/per-task-review.md
 link reference/seam-design.md      reference/seam-design.md
 link reference/leanness.md         reference/leanness.md
 link reference/security-review.md  reference/security-review.md
+link reference/model-policy.md     reference/model-policy.md
 link templates/plan.md             templates/plan.md
 link templates/progress.md         templates/progress.md
 

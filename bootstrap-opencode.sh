@@ -26,7 +26,7 @@ link() {
 for cmd in plan-feature dev-loop review-task; do
   link "$REPO/opencode/commands/$cmd.md" "$OC/commands/$cmd.md"
 done
-for agent in plan-gate task-implementer task-reviewer task-reviewer-cross security-reviewer; do
+for agent in plan-gate task-implementer task-implementer-lite task-reviewer task-reviewer-cross security-reviewer; do
   link "$REPO/opencode/agents/$agent.md" "$OC/agents/$agent.md"
 done
 link "$REPO/codex/skills/grounded-plan-feature" "$OC/skills/grounded-plan-feature"

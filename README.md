@@ -35,7 +35,7 @@ flowchart TD
 | `commands/` | the three commands above |
 | `agents/dev-loop-orchestrator.md` | per-task agent: one task to done, then return |
 | `rubrics/per-task-review.md` | shared rubric — correctness · seams/twins · plan-conformance · test *quality* |
-| `reference/` | seam-design · leanness (YAGNI) · security review axes |
+| `reference/` | seam-design · leanness (YAGNI) · security review axes · model policy (role→tier: cheap generation, strong verification; `[S/M/L]` task tiers set at plan time) |
 | `templates/` | `plan.md` checklist + `progress.md` cursor |
 | `skills/flow-report/` | export any plan/flow/diff as a self-contained HTML diagram report |
 | `codex/` + `bootstrap-codex.sh` | the planner, ported to Codex's skill model |

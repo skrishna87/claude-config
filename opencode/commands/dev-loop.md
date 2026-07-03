@@ -52,6 +52,7 @@ From `plan.md`, extract the **Seam map** and **Locked decisions** text. Note the
 `worktree`, `planPath`, `progressPath`, `baseSha`, `source`, and the fixed reference paths:
 `rubricPath=~/.config/opencode/dev-loop/rubrics/per-task-review.md`,
 `leannessPath=~/.config/opencode/dev-loop/reference/leanness.md`,
+`policyPath=~/.config/opencode/dev-loop/reference/model-policy.md`,
 `gatePath=~/.config/opencode/commands/review-task.md` (read it once now — it is the locked
 gate procedure you follow at every gate below).
 
@@ -59,9 +60,11 @@ gate procedure you follow at every gate below).
 
 Repeat until the plan has no unchecked tasks (or a task goes BLOCKED):
 
-1. **Implement.** Spawn **`task-implementer`** with the brief plus: the first unchecked task's
-   full text + acceptance criteria, and *"implement exactly this ONE task, leave changes
-   unstaged, return your IMPLEMENT RESULT block."* Read the result:
+1. **Implement.** Pick the implementer by the task's tier tag (`[S|M|L]` on its plan line;
+   untagged = M) per `policyPath`: **S/M → `task-implementer-lite`** (budget model), **L →
+   `task-implementer`** (session model). Spawn it with the brief plus: the first unchecked
+   task's full text + acceptance criteria, and *"implement exactly this ONE task, leave
+   changes unstaged, return your IMPLEMENT RESULT block."* Read the result:
    - `verify: FAIL` → BLOCKED (the implementer already spent its 2 attempts). Stop per rule 4.
    - `verify: NONE` → record it; if it's NONE on every task, surface that loudly at the end —
      the feature is shipping on review alone.
@@ -73,7 +76,10 @@ Repeat until the plan has no unchecked tasks (or a task goes BLOCKED):
      (`EXCL="$(git -C <worktree> rev-parse --git-common-dir)/info/exclude"; grep -qxF
      '.dev-loop/' "$EXCL" || echo '.dev-loop/' >> "$EXCL"`), then
      `git -C <worktree> diff > <worktree>/.dev-loop/review-cycle-<n>.diff`.
-   - Spawn `task-implementer` in fix mode with ONLY the blocking findings; it re-runs verify.
+   - Spawn the implementer in fix mode with ONLY the blocking findings; it re-runs verify.
+     Same variant as the implement pass — **except** per the policy's escalation rule: a cycle
+     caused by `design` or `semantics` on a lite-implemented task gets its fix from
+     `task-implementer` (session model); note the escalation.
    - Re-gate **scoped** (`--re-review` per `gatePath`): pass the prior blocking findings + the
      snapshot path to both reviewers. Still FAIL after 2 cycles → BLOCKED.
    - Classify each cycle's cause (`missing-test | semantics | design | style`) and append a

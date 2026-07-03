@@ -123,6 +123,11 @@ For each slice give: a one-line title, **acceptance criteria** (the checks that 
 **blocked-by** (earlier slices it needs), in the plan.md task format. Keep slices small enough
 that one is a healthy `/dev-loop` task — when in doubt, split.
 
+**Tag every task with a tier `[S|M|L]`** per `~/.claude/reference/model-policy.md` (S =
+mechanical/fully specified, M = normal slice, L = seam- or judgment-heavy). This sets which
+model tier implements it — classify honestly here, once, so the driver never has to guess;
+when torn between two tiers, take the higher.
+
 > Slicing discipline adapted from Matt Pocock's `to-issues` skill (MIT), emitting a plan.md
 > checklist instead of tracker issues.
 

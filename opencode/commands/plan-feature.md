@@ -101,7 +101,11 @@ Break the plan into **tracer-bullet vertical slices** in plan.md's **Tasks** che
 - Any prefactoring ("make the change easy, then make the easy change") is its own first slice.
 - Order by dependency; when in doubt about size, split.
 
-Each task line: `- [ ] n. <task> - *accept:* <criteria> - *blocked-by:* <none | task n>`
+Each task line: `- [ ] n. [S|M|L] <task> - *accept:* <criteria> - *blocked-by:* <none | task n>`
+
+**The tier tag `[S|M|L]`** (per `~/.config/opencode/dev-loop/reference/model-policy.md`: S =
+mechanical/fully specified, M = normal slice, L = seam- or judgment-heavy) sets which model
+tier implements the task — classify honestly here, once; when torn, take the higher.
 
 **PAUSE.** Present the slice list: *granularity right? dependencies correct? anything to merge
 or split?* Iterate until approved.

@@ -20,10 +20,11 @@
 
 ## Tasks
 <Each task = a vertical-slice tracer bullet: a thin path through every layer it touches,
-demoable on its own. Order by dependency.>
-- [ ] 1. <task> - *accept:* <criteria that prove it> - *blocked-by:* <none | task n>
-- [ ] 2. <task> - *accept:* <...> - *blocked-by:* <...>
-- [ ] 3. <task> - *accept:* <...> - *blocked-by:* <...>
+demoable on its own. Order by dependency. Tier [S|M|L]: S = mechanical, M = normal slice
+(default), L = seam/judgment-heavy - sets the implementing model's tier downstream.>
+- [ ] 1. [M] <task> - *accept:* <criteria that prove it> - *blocked-by:* <none | task n>
+- [ ] 2. [S] <task> - *accept:* <...> - *blocked-by:* <...>
+- [ ] 3. [L] <task> - *accept:* <...> - *blocked-by:* <...>
 
 ## Out of scope / deferred
 - <...>

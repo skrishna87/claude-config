@@ -54,7 +54,8 @@ progress.md; no remote → record `Published: no` and continue — orchestrators
 From `plan.md`, extract the **`## Seam map`** text and **`## Locked decisions`** text. Note the
 absolute `worktree`, `planPath` (`docs/<feature>/plan.md`), `progressPath`, `baseSha`, `source`, and
 the fixed reference paths: `rubricPath=~/.claude/rubrics/per-task-review.md`,
-`reviewGatePath=~/.claude/commands/review-task.md`, `leannessPath=~/.claude/reference/leanness.md`.
+`reviewGatePath=~/.claude/commands/review-task.md`, `leannessPath=~/.claude/reference/leanness.md`,
+`policyPath=~/.claude/reference/model-policy.md`.
 
 ## 3. Loop: one orchestrator agent per task
 Repeat until the plan has no unchecked tasks (or an orchestrator returns BLOCKED):
@@ -62,7 +63,11 @@ Repeat until the plan has no unchecked tasks (or an orchestrator returns BLOCKED
 1. Spawn a **`dev-loop-orchestrator`** agent via the **Agent tool** (`subagent_type:
    "dev-loop-orchestrator"`). Brief it with everything from step 2 plus: *"Advance this plan by
    exactly ONE task — the first unchecked — then return your ORCHESTRATOR RESULT block. Work only in
-   <worktree>."* Hand it crafted context, not your session history.
+   <worktree>."* Include the next task's **tier tag** (`[S|M|L]` from its plan line; untagged = M)
+   — the orchestrator picks its implementer's model from it per `policyPath`. The orchestrator
+   itself always inherits your session model (never pass `model` on this spawn): its reviewers
+   inherit from it, and verification is never downgraded. Hand it crafted context, not your
+   session history.
 2. Read the returned `ORCHESTRATOR RESULT` block:
    - **`status: APPROVED`** and `remaining > 0` → loop (spawn the next orchestrator). The plan box,
      progress.md, and commit are already updated, so the next orchestrator sees fresh state.
