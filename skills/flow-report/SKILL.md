@@ -12,11 +12,9 @@ be built), **refine** (what is vs. what should be — surface the open questions
 
 The template shell lives next to this file: `template.html` (same directory as this
 SKILL.md). Copy it and fill the placeholders — do not rebuild the shell from scratch.
-The shell is styled to the **Sky Blue design system** (claude.ai/design project
-`REDACTED`): Fraunces for headings/stat numerals, Inter for
-UI, Sky Blue `#0284c7` as the brand accent, semantic light/dark tokens. If the design
-system changes, re-extract tokens from that project's `_ds_bundle.css` (via DesignSync)
-rather than inventing values.
+The shell is styled to a simple **Sky Blue** design system: Fraunces for headings/stat
+numerals, Inter for UI, Sky Blue `#0284c7` as the brand accent, semantic light/dark
+tokens. Swap the accent and fonts in `template.html` to retheme.
 
 ## 1. Resolve subject + purpose
 
@@ -56,7 +54,7 @@ Rules that keep it intuitive:
   **what to look at** ("the two paths must stay symmetric", "everything green is new").
 
 **Standard classes** — use these `classDef`s verbatim so colors always match the legend
-chips in the template (Sky Blue intent tokens: success / primary / warning / destructive;
+chips in the template (intent tokens: success / primary / warning / destructive;
 translucent fills work on both light and dark):
 
 ```
