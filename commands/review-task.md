@@ -1,5 +1,5 @@
 ---
-description: Locked review gate — cross-model rubric review (Claude self + codex) plus dedicated security and leanness passes, over a task's diff or a whole feature. The ONLY reviewer /dev-loop uses.
+description: Locked review gate — cross-model rubric review (Claude self + GPT via the opencode bridge) plus dedicated security and leanness passes, over a task's diff or a whole feature. The ONLY reviewer /dev-loop uses.
 argument-hint: "[repo/worktree path] [--integration <base-ref> for a whole-feature review] [--re-review after a fix cycle, with the prior blocking findings]"
 ---
 
@@ -13,8 +13,8 @@ reviewers judge the SAME diff by the SAME rubric; you consolidate.
 ## 1. Establish scope + repo
 
 - **Find the git repo dir** holding the changes — the dir with a `.git`. In a mono-style repo
-  this is the sub-repo / worktree, **NEVER the mono root** (running codex at a non-git root is
-  what caused the past "no git" failure). Call it `$REPO`.
+  this is the sub-repo / worktree, **NEVER the mono root** (running the cross-model reviewer at
+  a non-git root is what caused the past "no git" failure). Call it `$REPO`.
 - **Scope** depends on the fixed-point:
   - **Per-task (default)** — the current task = the **unstaged** working-tree changes (prior
     approved tasks are already committed, so out of scope automatically).
@@ -38,7 +38,7 @@ reviewers judge the SAME diff by the SAME rubric; you consolidate.
 - `$ARGUMENTS` may override `$REPO` or pass `--integration <base>` / `--re-review`.
 - **Make the plan readable INSIDE `$REPO` (the context mirror).** The plan/progress usually live at
   the mono root (`docs/<feature>/{plan,progress}.md`), which a reviewer running `-C "$REPO"` — and
-  **especially codex in its read-only sandbox** — cannot reach. Mirror them into the worktree
+  **especially the cross-model reviewer confined to `$REPO`** — cannot reach. Mirror them into the worktree
   (git-excluded, refreshed NOW so they're never stale), and point every reviewer at the local copy:
   ```bash
   mkdir -p "$REPO/.dev-loop"
@@ -76,7 +76,7 @@ Static review can't see a test that doesn't run. Resolve the verify command(s) �
 ## 4. Run the reviewers (in parallel)
 
 In `--re-review` mode, prepend the prior blocking findings to BOTH reviewer prompts, plus the
-snapshot path (`$REPO`-relative, so codex's sandbox can read it) and the §1 re-review instruction
+snapshot path (`$REPO`-relative, so the cross-model reviewer can read it) and the §1 re-review instruction
 (verify resolution + scan the fix delta vs the snapshot only) in place of the full-pass
 instruction; Reviewer D (leanness) is skipped — its advisory verdict from the first pass stands.
 
@@ -87,23 +87,36 @@ for context — and, in `--integration` mode, to actively trace cross-task and c
 Hand it crafted context — **not** your session history. Require the rubric's output format ending
 in `VERDICT: PASS/FAIL`.
 
-**Reviewer B — codex (cross-model):**
+**Reviewer B — GPT cross-model (opencode bridge):**
 ```bash
-codex exec -C "$REPO" -s read-only -o /tmp/codex-review.md \
-  "$(cat ~/.claude/rubrics/per-task-review.md)
+timeout 900 opencode run --dir "$REPO" -m openai/gpt-5.5 --variant high --agent plan \
+  "You are doing a READ-ONLY review — do not modify any files.
+
+$(cat ~/.claude/rubrics/per-task-review.md)
 
 Run 'git diff' (or 'git diff <base>...HEAD' for an integration review) to see the changes and
 review ONLY those, against the plan at .dev-loop/plan.md (read it — it holds the acceptance
 criteria, seam map, and MUST-NOTs for this work). Trace how they compose with the flows they join
-and check twin-path symmetry."
+and check twin-path symmetry." > /tmp/cross-review.md 2>&1
 ```
-Then read `/tmp/codex-review.md`.
-- The `.dev-loop/plan.md` path is the worktree-local mirror from §1 — codex `-C "$REPO"` can read
-  it where it could not read the mono-root `docs/<feature>/plan.md`.
-- `-C "$REPO"` points codex at the real git dir; `-s read-only` lets it introspect without writing.
-- If codex errors on git, retry once adding `--skip-git-repo-check`.
-- If codex is unavailable/unauthed, proceed with Reviewer A alone but **explicitly flag that
-  coverage was single-model** — never silently drop the cross-model reviewer.
+Then read `/tmp/cross-review.md` — the findings + verdict are at the END, after the streamed
+tool-call log.
+- The model is **pinned**: `openai/gpt-5.5 --variant high`. Benchmarked 2026-07-03 on a real gate
+  diff: 5.5-high was the fastest AND best-calibrated (~3 min); gpt-5.4-high was 2× slower and
+  over-escalated; 5.5-fast bought nothing. Never tier the cross-model reviewer down.
+- `--dir "$REPO"` runs it inside the worktree (so `.dev-loop/plan.md` resolves where the
+  mono-root `docs/<feature>/plan.md` would not); `--agent plan` is opencode's built-in read-only
+  agent — edits are denied at the permission layer, not just by instruction.
+- **FOREGROUND with the `timeout` shown — NEVER background-and-poll** (a backgrounded run can die
+  silently and the poll never returns; this burned a real run). Check the exit code; on non-zero
+  or timeout, retry once, then fall back.
+- Fallback chain: opencode unavailable/unauthed → `codex exec -C "$REPO" -s read-only -o
+  /tmp/cross-review.md "<same prompt>"` (foreground + timeout, same rule; on hosts where codex's
+  bwrap sandbox is blocked by apparmor userns restrictions, `-s danger-full-access` plus the
+  READ-ONLY preamble is the user-authorized workaround; if codex errors on git, retry once with
+  `--skip-git-repo-check`). If neither bridge works, proceed with Reviewer A alone but
+  **explicitly flag that coverage was single-model** — never silently drop the cross-model
+  reviewer.
 
 **Reviewer C — security (specialist) — `--integration` mode ONLY:** security is a whole-surface
 property — cross-task auth drift, trust-boundary confusion, and missing-authz bugs only appear once
@@ -125,7 +138,7 @@ yagni/shrink`, ending `net: -N lines possible` or `Lean already. Ship.` This axi
 ## 5. Consolidate
 
 - Group findings by rubric section (so a passing section never masks a failing one). Keep
-  Claude's and codex's lists visible side by side — do not average them.
+  Claude's and GPT's lists visible side by side — do not average them.
 - Where the two reviewers **disagree** (one flags, the other doesn't), investigate the flagged
   item yourself and decide — disagreements are where blind spots hide.
 - Assign final severity per the rubric. **Security:** per-task, security findings come only from
@@ -142,7 +155,7 @@ yagni/shrink`, ending `net: -N lines possible` or `Lean already. Ship.` This axi
 ```
 REVIEW: <feature> / <task|INTEGRATION since base>
   Verify: PASS <cmd> | FAIL (auto-FAIL) | NONE (no test command found)
-  Claude: <Crit/Imp/Min>   codex: <Crit/Imp/Min>   [single-model if codex unavailable]
+  Claude: <Crit/Imp/Min>   GPT: <Crit/Imp/Min>   [single-model if the cross-model bridge is unavailable]
   Security (Reviewer C, --integration only): <P0/P1 blocking findings with file:line + slug | "none" | "n/a (per-task)">  (P2 advisory: <n>)
   Blocking: <Critical+Important findings with file:line, grouped by section, or "none">
   Leanness (advisory): <net: -N lines possible | Lean already>

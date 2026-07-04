@@ -73,8 +73,11 @@ done and gated either way — delegation is an optimization, not a requirement. 
 
 4. **Review gate** (locked — delegate or inline). Run the gate per `reviewGatePath`
    (`~/.claude/commands/review-task.md`) against the unstaged diff (`git -C "<worktree>" diff`):
-   Claude rubric review + **codex** cross-model + the leanness pass, consolidated to a verdict.
-   Do **not** substitute any other reviewer. If codex is unavailable, proceed single-model and mark
+   Claude rubric review + **GPT** cross-model (opencode bridge, pinned `openai/gpt-5.5 --variant
+   high`; FOREGROUND with a timeout, never background-and-poll) + the leanness pass, consolidated
+   to a verdict.
+   Do **not** substitute any other reviewer. If no cross-model bridge is available (opencode, then
+   the codex fallback), proceed single-model and mark
    `coverage: DEGRADED` (never silently drop it). (The per-task gate is A/B/D — your security
    coverage is A/B's rubric Security check; the **specialist security axis is integration-only**, run
    by the driver in step 4, not here, since security is a whole-surface property.)

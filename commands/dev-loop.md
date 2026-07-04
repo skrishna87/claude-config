@@ -76,7 +76,7 @@ Repeat until the plan has no unchecked tasks (or an orchestrator returns BLOCKED
      <base>..HEAD`, note the working tree holds the in-flight task. The user fixes/re-plans, then
      relaunches `/dev-loop`. Do NOT continue past a block — a later task likely
      depends on it.
-   - If `coverage: DEGRADED`, record it; report loudly at the end (codex was down → single-model).
+   - If `coverage: DEGRADED`, record it; report loudly at the end (cross-model bridge was down → single-model).
    - If `verify: NONE` (no runnable test command found), record it; if it's NONE on every task,
      surface that loudly — the whole feature is shipping on review alone.
    - Record `cycles` + `cycle-cause` per task (a running `task N: cycles=X (cause)` list is enough).

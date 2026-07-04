@@ -42,7 +42,7 @@ Untagged tasks (plans written before this policy) = `M`.
 | Implementer, `[S]`/`[M]` task | **budget** | Claude Code: spawn implementer subagent with `model: sonnet` · opencode: `task-implementer-lite` |
 | Implementer, `[L]` task | session model | Claude Code: omit `model` (inherit) · opencode: `task-implementer` |
 | Fix cycles | per rule 4 | escalate on `design`/`semantics` cause |
-| Gate reviewers (both halves) | **strong — never below session** | Claude Code: inherit + codex CLI · opencode: `task-reviewer` (inherits) + `task-reviewer-cross` (pinned) |
+| Gate reviewers (both halves) | **strong — never below session** | Claude Code: inherit + GPT via opencode bridge (`openai/gpt-5.5 --variant high`, pinned) · opencode: `task-reviewer` (inherits) + `task-reviewer-cross` (pinned) |
 | Plan-gate, security, integration | strongest available | root-of-trust and whole-surface passes |
 
 ## Ability table (personal calibration — vibes, update as models ship)
@@ -55,8 +55,15 @@ API design, copy. **Cost is per-harness, not universal** — it reflects what YO
 | fable-5 | 9 | 9 | expensive | expensive |
 | opus-4.8 | 7 | 8 | mid | mid |
 | sonnet-5 | 5 | 7 | cheap | cheap |
-| gpt-5.5 | 8 | 5 | ~free (codex/ChatGPT auth) | sub-priced via codex auth; API otherwise |
+| gpt-5.5 | 8 | 5 | ~free (opencode/codex ChatGPT OAuth) | sub-priced via ChatGPT OAuth; API otherwise |
 | OSS (deepseek-v4, glm-5.x, qwen) | test-driving | test-driving | n/a | cheapest — opencode gateway/OpenRouter/local |
+
+**Cross-model reviewer pin — measured, don't re-tier.** Benchmark 2026-07-03 (identical review
+prompt, real gate diff, all `--variant high` via `opencode run --agent plan`): gpt-5.5 = 3m02s,
+fastest and best-calibrated; gpt-5.5-fast = 3m18s, no gain; gpt-5.4 = 5m55s, 2× slower AND
+over-escalated a Minor to a blocking Important. Down-tiering the reviewer buys negative speed
+and worse calibration — the pin stays `openai/gpt-5.5 --variant high` for every gate
+(per-task, integration, plan-gate). Rule 2 applies with data behind it.
 
 ## Test-driving OSS / other labs (opencode)
 

@@ -146,7 +146,7 @@ runs on the **complete** plan (after slicing) because the expensive misses live 
 and acceptance criteria, not just the seam map.
 
 For **each repo in the plan's write-set** (usually one; a cross-repo feature has one pass per
-side): mirror the plan into the repo so codex's `-C "$REPO"` sandbox can read it. This is the
+side): mirror the plan into the repo so the cross-model auditor running inside `$REPO` can read it. This is the
 plan-only variant of `/review-task` §1's mirror — do NOT copy that block verbatim: `progress.md`
 doesn't exist yet at planning time (it's created at Done).
 
@@ -160,8 +160,10 @@ cp "<abs>/docs/<feature>/plan.md" "$REPO/.dev-loop/plan.md"
 Then:
 
 ```bash
-codex exec -C "$REPO" -s read-only -o /tmp/codex-plan-review.md \
-  "Review the feature plan at .dev-loop/plan.md against THIS repo's actual code. There is no
+timeout 900 opencode run --dir "$REPO" -m openai/gpt-5.5 --variant high --agent plan \
+  "You are doing a READ-ONLY audit — do not modify any files.
+
+Review the feature plan at .dev-loop/plan.md against THIS repo's actual code. There is no
 diff yet — you are auditing whether the plan is grounded, before implementation. Check, with
 file:line evidence for every claim:
 1. Every symbol/endpoint/flag the plan pins resolves where the plan says it does.
@@ -177,14 +179,20 @@ file:line evidence for every claim:
 6. Check-then-act placement: is any enforcement the plan adds separated from the write it
    guards by a transaction boundary, and does the plan say whether that race is accepted?
 Report each finding as High/Medium/Low with file:line and what the plan should say instead.
-If the plan is sound, say so plainly — do not invent findings."
+If the plan is sound, say so plainly — do not invent findings." > /tmp/plan-review.md 2>&1
 ```
 
-Then **adjudicate**: verify each finding against the code yourself before acting — codex can
-be wrong too (the `/review-task` §5 disagreement discipline applies). Fix the plan for every
+Then read `/tmp/plan-review.md` (findings at the END, after the streamed tool-call log).
+Bridge rules are `/review-task` §4 Reviewer B's: model pinned `openai/gpt-5.5 --variant high`,
+FOREGROUND with the timeout (never background-and-poll), retry once on failure, then the codex
+fallback chain.
+
+Then **adjudicate**: verify each finding against the code yourself before acting — the auditor
+can be wrong too (the `/review-task` §5 disagreement discipline applies). Fix the plan for every
 confirmed finding. There is **no fix-cycle budget here** — plan fixes are markdown edits, so
 just fix and move on; run ONE confirmation re-pass only if a High finding forced re-slicing.
-If codex is unavailable, proceed but say so loudly at Done — the plan ships single-model.
+If no cross-model bridge is available, proceed but say so loudly at Done — the plan ships
+single-model.
 
 **PAUSE.** Present the findings and how each was resolved (or refuted, with evidence).
 Ask: *"Gate findings resolved to your satisfaction?"* Wait for go.
