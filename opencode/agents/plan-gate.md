@@ -1,5 +1,5 @@
 ---
-description: Adversarial cross-model gate for feature plans. Audits a docs/<feature>/plan.md against the repo's actual code BEFORE implementation — pinned symbols, call-site coverage, auth reach, reused-contract semantics. Read-only; reports findings, never edits. Spawned by /plan-feature Stage 5.
+description: Adversarial cross-model gate for feature plans. Audits a docs/<feature>/plan.md against the repo's actual code BEFORE implementation — pinned symbols, call-site coverage, auth reach, reused-contract semantics, write-path safety. Read-only; reports findings, never edits. Spawned by /plan-feature Stage 5.
 mode: subagent
 # Pin this to a DIFFERENT provider than your primary agent — the value of this gate is
 # cross-model independence, not this specific model. List available ids: `opencode models`;
@@ -31,6 +31,11 @@ every claim you make:
    code doesn't have (extra filters, side conditions, different semantics)?
 6. **Check-then-act placement.** Is any enforcement the plan adds separated from the write it
    guards by a transaction boundary, and does the plan say whether that race is accepted?
+7. **Destructive write paths.** Does the plan (or the existing flow it extends) replace data
+   by delete-then-recreate, run multi-statement writes with no stated transaction boundary,
+   or accept collection input with no server-side bound? A write path whose atomicity,
+   ordering, and bounds the plan does not state is a High finding — partial failure there is
+   data loss.
 
 Report each finding as **High/Medium/Low** with `file:line` and **what the plan should say
 instead**. If the plan is sound, say so plainly — do not invent findings. Do not edit the

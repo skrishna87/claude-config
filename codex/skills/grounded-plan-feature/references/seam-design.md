@@ -42,7 +42,15 @@ A design is grounded when every claim is pinned to something real in the codebas
    cancel/budget/timeout, sync/async, API/worker, or two repos sharing a contract.
 5. **Match reused-contract semantics.** Read the actual current semantics for any reused status,
    enum, queue message, return shape, or persisted value. Do not rely on names alone.
-6. **Name the real changed path to test.** State the path a test must exercise to prove the
+6. **Pin the write-path invariants.** For every state-mutating flow (save, import, sync, bulk
+   edit): atomicity (what must succeed-or-fail together, and the transaction/upsert that
+   guarantees it), destructive ordering (never destroy existing data before its replacement is
+   durably committed — delete-then-recreate outside a transaction loses data on one failed
+   insert), input bounds (an explicit server-side max on every collection input), and scale
+   ceilings (anything that grows with N vs the real limit — DB driver param caps, payload,
+   timeout — with a batching strategy).
+7. **Name the real changed path to test.** State the path a test must exercise to prove the
    slice through the seam, not around it.
 
-A plan that cannot pin a symbol, name its seam, or account for a twin is not ready to slice.
+A plan that cannot pin a symbol, name its seam, account for a twin, or state a write path's
+atomicity is not ready to slice.

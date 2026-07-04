@@ -149,6 +149,13 @@ yagni/shrink`, ending `net: -N lines possible` or `Lean already. Ship.` This axi
   before blocking.
 - Leanness findings stay in their own advisory block (non-blocking unless the over-engineering is
   egregious).
+- **Dispose of every advisory — nothing scrolls past undecided.** Each advisory finding (Minor,
+  security P2, leanness, mutation survivors) gets exactly one disposition: **taken** (fix now —
+  only when trivially cheap and inside the task's scope), **recorded** (a one-line residual in
+  progress.md WITH the fix recipe, so whoever next touches that code inherits it), or **dropped**
+  with a one-line reason. Per-task, default to `recorded` — don't grow a task's scope for a Minor.
+  The integration review is the batch point: the accumulated ledger is adjudicated there, with the
+  user, before anything merges. Advisory means *a human decides*, not *nobody decides*.
 
 ## 6. Verdict
 
@@ -159,8 +166,9 @@ REVIEW: <feature> / <task|INTEGRATION since base>
   Security (Reviewer C, --integration only): <P0/P1 blocking findings with file:line + slug | "none" | "n/a (per-task)">  (P2 advisory: <n>)
   Blocking: <Critical+Important findings with file:line, grouped by section, or "none">
   Leanness (advisory): <net: -N lines possible | Lean already>
+  Advisories: taken <n> / recorded <n> / dropped <n>  (each disposition listed above)
   VERDICT: PASS | FAIL
 ```
 **PASS** = zero unresolved Critical or Important. Per-task that includes any security issue A/B flag
 from the rubric; at `--integration` it also requires **zero security P0/P1** from Reviewer C. Minor,
-security P2, and leanness issues are noted, not blocking.
+security P2, and leanness issues never block — but each carries a §5 disposition; "noted" ≠ dropped.

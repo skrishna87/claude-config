@@ -70,7 +70,15 @@ Produce:
 6. **Endpoint auth reach** — for every endpoint added or touched: the permission guard on its
    route (grep-verified, named) and what set of callers it actually admits. "It has a guard"
    isn't grounding.
-7. **Verify commands** — the exact build/test command(s) for this repo, read from
+7. **Write-path invariants** — for every state-mutating flow (form save, import, bulk
+   update): the atomicity boundary (what succeeds-or-fails together, and the transaction/
+   upsert guaranteeing it), destructive ordering (nothing deletes existing data before its
+   replacement is durable — delete-then-recreate outside a transaction means one failed
+   insert loses everything), input bounds (explicit server-side max on every collection
+   input), and scale ceilings (anything growing with N vs the real limit — DB param caps,
+   payload, timeout — plus batching). Can't answer one from the code → it's a Stage 1
+   question; grill, don't assume.
+8. **Verify commands** — the exact build/test command(s) for this repo, read from
    package.json / Makefile / CI config — grounded, not guessed.
 
 **PAUSE.** Present the seam map + anything that surprised you. Ask: *"Does this match your

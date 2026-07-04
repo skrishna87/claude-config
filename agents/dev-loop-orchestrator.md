@@ -101,7 +101,9 @@ done and gated either way — delegation is an optimization, not a requirement. 
 6. **Commit + checkpoint + push (on PASS).** In ONE commit on the feature branch:
    - tick this task's checkbox in `planPath` (`- [ ]` → `- [x]`, match the number),
    - rewrite `progressPath` (approved count, `In flight: none`, next unchecked task, any new gotchas,
-     and the resume line: `Run /dev-loop <feature>`),
+     the gate's `recorded` advisories — one line each, finding + fix recipe, under a residuals/
+     advisory heading (the integration review re-reads these as its ledger) — and the resume line:
+     `Run /dev-loop <feature>`),
    - `git -C "<worktree>" add -A && git -C "<worktree>" commit -m "<task>: <one-line summary>"`.
    Capture the sha (`git -C "<worktree>" rev-parse HEAD`). Then publish: if the branch has an
    upstream (the driver sets it at creation), `git -C "<worktree>" push` — the task is gated and

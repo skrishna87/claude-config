@@ -59,8 +59,20 @@ Ungrounded plans are where the seam bugs are born. For the feature you're planni
    status code, an enum value, a queue message, a return shape), read the *actual* current
    semantics at the source — not what the plan assumes. `201 recoverable_error` vs `500`,
    "do NOT ack" vs acked, `ask_user` normalized to `accepted` — these drift silently.
-6. **Name the real changed path to test.** State the end-to-end path a test must exercise to
+6. **Pin the write-path invariants.** For every state-mutating flow the feature adds or
+   touches (save, import, sync, bulk edit), the plan must state, explicitly: **atomicity** —
+   which statements must succeed-or-fail *together*, and the transaction/upsert that
+   guarantees it; **destructive ordering** — existing data is never destroyed before its
+   replacement is durably committed (delete-then-recreate a collection outside a transaction
+   = one failed insert loses the user's data); **input bounds** — every collection /
+   one-to-many input gets an explicit server-side max, or a stated reason unbounded is safe;
+   **scale ceilings** — anything that grows with N (statement params, payload, loop) named
+   against the real limit it will hit (DB driver param caps — ~65k Postgres, 999 older
+   SQLite — payload sizes, timeouts) with the batching that avoids it. A write path the plan
+   can't answer these for is not grounded — it's a data-loss design that hasn't failed yet.
+7. **Name the real changed path to test.** State the end-to-end path a test must exercise to
    prove the slice — through the seam, not around it. Green-on-the-old-path is not proof.
 
-A plan that survives all six is ready to slice into vertical-slice tasks. One that can't pin a
-symbol, can't name its seam, or hand-waves a twin is not — fix it before `/dev-loop` touches it.
+A plan that survives all seven is ready to slice into vertical-slice tasks. One that can't pin a
+symbol, can't name its seam, hand-waves a twin, or can't state a write path's atomicity is not —
+fix it before `/dev-loop` touches it.

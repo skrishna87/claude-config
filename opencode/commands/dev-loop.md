@@ -87,7 +87,8 @@ Repeat until the plan has no unchecked tasks (or a task goes BLOCKED):
      so this line is the only way the next task's implementer inherits it.
 4. **PASS → commit + checkpoint + push.** In ONE commit on the feature branch: tick the task's
    checkbox in plan.md, rewrite progress.md (approved count, `In flight: none`, next task, new
-   gotchas, resume line `Run /dev-loop <feature>`), then `git -C <worktree> add -A && git -C
+   gotchas, the gate's `recorded` advisories — one line each, finding + fix recipe — and the
+   resume line `Run /dev-loop <feature>`), then `git -C <worktree> add -A && git -C
    <worktree> commit -m "<task>: <summary>"`, and push if published (push failure = note,
    never a blocker; never force). Keep a running `task N: cycles=X (cause)` list.
 5. **BLOCKED → STOP.** Surface what blocked, show `git -C <worktree> log --oneline
@@ -107,7 +108,9 @@ When every task is checked:
   keep looping (back to §3). Do NOT offer to merge.
 - **PASS** → STOP. Summarize (include cycle totals and any recurring cycle-cause — a repeated
   cause is a systematic implementer gap, not noise; also any DEGRADED coverage or verify:
-  NONE). Show the log and tell the user: do your final review / manual test; on your
+  NONE). Present the **advisory ledger** — every advisory from the run with its disposition
+  (taken / recorded / dropped + reason) for the user to overrule; an advisory with no
+  disposition is a gap, not a pass. Show the log and tell the user: do your final review / manual test; on your
   confirmation fast-forward `<branch>` onto `<source>` (and push if wanted). **Never FF or
   push without explicit confirmation.**
 - **After the confirmed FF** — ask about cleanup (never do it unprompted): remove the

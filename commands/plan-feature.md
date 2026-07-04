@@ -74,7 +74,16 @@ codebase. Concretely, produce:
    route (grep-verified, named) and **what set of callers it actually admits**. "It has a
    guard" isn't grounding — if a broadly-permitted role can reach the new surface, or probe
    state through its responses (409-vs-200 oracles), the plan must scope it explicitly.
-7. **Verify commands** — the exact command(s) that build and test this repo, read from
+7. **Write-path invariants** — for every state-mutating flow the feature adds or touches
+   (form save, import, bulk update): the **atomicity boundary** (what succeeds-or-fails
+   together, and the transaction/upsert guaranteeing it), **destructive ordering** (nothing
+   deletes existing data before its replacement is durable — delete-then-recreate outside a
+   transaction means one failed insert loses everything), **input bounds** (an explicit
+   server-side max on every collection / one-to-many input), and **scale ceilings** (anything
+   that grows with N, named against the real limit — DB param caps, payload size, timeout —
+   plus its batching strategy). If the code can't answer one of these, it's a Stage 1
+   question — grill the user, don't assume.
+8. **Verify commands** — the exact command(s) that build and test this repo, read from
    package.json / Makefile / CI config / docs — grounded, not guessed. `/dev-loop`'s
    execute-verify step runs these on every task, so a wrong command here silently disables it.
 
@@ -178,6 +187,10 @@ file:line evidence for every claim:
    doesn't have (extra filters, side conditions, different semantics)?
 6. Check-then-act placement: is any enforcement the plan adds separated from the write it
    guards by a transaction boundary, and does the plan say whether that race is accepted?
+7. Destructive write paths: does the plan (or the existing flow it extends) replace data by
+   delete-then-recreate, run multi-statement writes with no stated transaction boundary, or
+   accept collection input with no server-side bound? A write path whose atomicity, ordering,
+   and bounds the plan does not state is a High finding — partial failure there is data loss.
 Report each finding as High/Medium/Low with file:line and what the plan should say instead.
 If the plan is sound, say so plainly — do not invent findings." > /tmp/plan-review.md 2>&1
 ```

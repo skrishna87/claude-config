@@ -94,7 +94,10 @@ reviewer spends a token. Then either spawn one orchestrator-style reviewer or fo
 `~/.claude/commands/review-task.md` with `--integration <base>` (scope = `git diff <base>...HEAD`).
 - **FAIL** → seams don't hold. Surface the blockers, add fix tasks to `plan.md` (unchecked), keep
   looping (back to step 3). Do NOT offer to merge.
-- **PASS** → STOP. Summarize, show `git -C <worktree> log --oneline <base>..HEAD`, and tell the user:
+- **PASS** → STOP. Summarize, and present the **advisory ledger**: every advisory from the run
+  (Minors, security P2, leanness) with its disposition — taken / recorded (progress.md residual +
+  fix one-liner) / dropped + reason — for the user to overrule before merge. An advisory with no
+  disposition is a gap, not a pass. Then show `git -C <worktree> log --oneline <base>..HEAD`, and tell the user:
   do your final review / manual test; on your confirmation I'll fast-forward `<branch>` onto `<source>`
   (and push if you want). **Never FF or push without explicit confirmation.**
 - **After the confirmed FF** — ask about cleanup (never do it unprompted): remove the worktree

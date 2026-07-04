@@ -66,6 +66,11 @@ Spawn via the task tool, each with a crafted brief — repo path, the exact diff
   advisory); dedupe against the rubric reviewers; where only the specialist flags it, confirm
   the mitigation is truly absent before blocking.
 - Leanness stays advisory unless the over-engineering is egregious.
+- **Dispose of every advisory — nothing scrolls past undecided.** Each advisory finding (Minor,
+  security P2, leanness) gets exactly one disposition: **taken** (fix now — only when trivially
+  cheap and in-scope), **recorded** (one-line residual + fix recipe into progress.md), or
+  **dropped** with a one-line reason. Per-task default is `recorded`; the integration review
+  adjudicates the accumulated ledger with the user before anything merges.
 
 ## 5. Verdict
 
@@ -76,7 +81,9 @@ REVIEW: <feature> / <task|INTEGRATION since base>
   Security (integration only): <P0/P1 findings with file:line + slug | "none" | "n/a (per-task)">  (P2 advisory: <n>)
   Blocking: <Critical+Important findings with file:line, grouped by section, or "none">
   Leanness (advisory): <net: -N lines possible | Lean already>
+  Advisories: taken <n> / recorded <n> / dropped <n>  (each disposition listed above)
   VERDICT: PASS | FAIL
 ```
 **PASS** = zero unresolved Critical or Important; at `--integration` also zero security P0/P1.
-Minor, security P2, and leanness issues are noted, not blocking.
+Minor, security P2, and leanness issues never block — but each carries a §4 disposition;
+"noted" ≠ dropped.

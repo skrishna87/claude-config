@@ -18,6 +18,21 @@ validation at trust boundaries.
 **Silent failures** — swallowed exceptions, bare except/catch, fallbacks that hide errors,
 ignored return values.
 
+**State-mutation safety** *(data loss lives here — check this axis unprompted)* — for any diff
+that writes persistent state:
+- **Destructive-before-durable**: existing data deleted/truncated/overwritten before its
+  replacement is committed (delete-then-recreate a child collection, truncate-then-write a
+  file) with no enclosing transaction — one failed second step and the user's data is gone.
+  **Critical**, even if every test passes.
+- **Missing atomicity**: multi-statement writes that must land together but can partially fail
+  (no transaction, no upsert), leaving half-written state.
+- **Unbounded input meeting a hard ceiling**: caller-controlled collection sizes (one-to-many
+  form sections, arrays) flowing into a single statement or request — DB driver param caps
+  (~65k Postgres, 999 older SQLite), payload limits, timeouts. No server-side bound and no
+  batching is **Important** even though it works on dev-sized data.
+- **Non-idempotent retries**: a write the client may replay (double-submit, network retry)
+  that double-applies.
+
 **Composition / twin-path / contract** *(the seam lens — this is where features break)* —
 - How does this diff compose with the flows it joins (queues, replay, retry, drain, cancel)?
   Trace it; don't assume.
