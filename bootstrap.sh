@@ -32,8 +32,15 @@ link templates/progress.md         templates/progress.md
 # --- companion skills ---------------------------------------------------------------
 link skills/flow-report            skills/flow-report
 
-command -v codex >/dev/null 2>&1 || echo "WARNING: codex CLI not found — /review-task's cross-model \
-reviewer (Reviewer B) will run DEGRADED (single-model) until codex is installed + authed." >&2
+if ! command -v opencode >/dev/null 2>&1; then
+  if command -v codex >/dev/null 2>&1; then
+    echo "WARNING: opencode CLI not found — /review-task's cross-model reviewer (Reviewer B) will \
+use the codex exec FALLBACK until opencode is installed + authed (openai/gpt-5.5)." >&2
+  else
+    echo "WARNING: neither opencode nor codex CLI found — /review-task's cross-model reviewer \
+(Reviewer B) will run DEGRADED (single-model) until one is installed + authed." >&2
+  fi
+fi
 
 echo
 echo "Active loop linked: /plan-feature (align→ground→spec→slice) + /dev-loop (orchestrator-per-task,"
