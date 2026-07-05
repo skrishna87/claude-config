@@ -21,7 +21,9 @@ every claim you make:
    does.
 2. **Call-site coverage.** For every existing function the plan modifies: find ALL call sites.
    Does the plan account for each caller, or does a shared path leak the change into flows the
-   plan never mentions?
+   plan never mentions? For any new tool/route/name the plan introduces into an existing
+   dispatch or composition layer, check collision and precedence against names that layer
+   already routes.
 3. **Auth reach.** For every endpoint added or touched: what permission guard is on the route,
    and what callers does it actually admit? Could a permitted-but-unintended caller reach the
    new surface, or probe state through its responses (e.g. 409-vs-200 oracles)?
@@ -36,6 +38,11 @@ every claim you make:
    or accept collection input with no server-side bound? A write path whose atomicity,
    ordering, and bounds the plan does not state is a High finding — partial failure there is
    data loss.
+8. **External contracts.** For every third-party SDK/API the plan pins (types, method
+   receivers, field types, name/length limits, pagination), verify against the actual
+   dependency source — module cache (`~/go/pkg/mod`), `vendor/`, `node_modules` — or official
+   docs. Reading dependency sources outside the repo is in scope for this audit. If the
+   dependency isn't present locally, report the pin as **unverified**, not sound.
 
 Report each finding as **High/Medium/Low** with `file:line` and **what the plan should say
 instead**. If the plan is sound, say so plainly — do not invent findings. Do not edit the
