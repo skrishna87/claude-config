@@ -17,8 +17,9 @@ You operate on the `/dev-loop` **on-disk state**:
 - per-task commits on the feature branch in the shared worktree.
 
 Your spawn prompt gives you: the **worktree path**, `planPath`, `progressPath`, `rubricPath`,
-`reviewGatePath`, `leannessPath`, `policyPath`, the task's **tier** (`S|M|L`; missing = M), the
-**Seam map** and **Locked decisions** text, and the `baseSha`. All git/file ops use absolute
+`reviewGatePath`, `leannessPath`, `policyPath`, the task's **tier** (`S|M|L`; missing = M),
+whether the task is **`[leaf]`** (cross-model review deferred to integration — see `policyPath`),
+the **Seam map** and **Locked decisions** text, and the `baseSha`. All git/file ops use absolute
 paths + `git -C "<worktree>"` — you have NO cwd.
 
 ## Delegation rule (read first)
@@ -78,7 +79,12 @@ done and gated either way — delegation is an optimization, not a requirement. 
    to a verdict.
    Do **not** substitute any other reviewer. If no cross-model bridge is available (opencode, then
    the codex fallback), proceed single-model and mark
-   `coverage: DEGRADED` (never silently drop it). (The per-task gate is A/B/D — your security
+   `coverage: DEGRADED` (never silently drop it).
+   - **`[leaf]` task → tell the gate so** (pass the leaf signal per `reviewGatePath`): Reviewer B is
+     **deferred to integration**, so this per-task gate runs Reviewer A + verify + leanness only,
+     and you return `coverage: BATCHED` (not DEGRADED — that's for an *unavailable* bridge; BATCHED
+     is a *deliberate* deferral). Only defer for a genuine leaf, and **never for an `[L]` task**.
+     Not a leaf → run the full A/B/D gate as above. (The per-task gate is A/B/D — your security
    coverage is A/B's rubric Security check; the **specialist security axis is integration-only**, run
    by the driver in step 4, not here, since security is a whole-surface property.)
 
@@ -118,7 +124,7 @@ ORCHESTRATOR RESULT
   status: APPROVED | BLOCKED | DONE
   commit: <sha | ->
   verify: PASS <cmd> | FAIL | NONE
-  coverage: CROSS-MODEL | DEGRADED | -
+  coverage: CROSS-MODEL | BATCHED (leaf → cross-model at integration) | DEGRADED | -
   cycles: <0 | 1 | 2 — gate fix→review cycles used>
   cycle-cause: <missing-test | semantics | design | style | - (when cycles: 0)>
   remaining: <count of still-unchecked tasks AFTER this one>

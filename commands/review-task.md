@@ -88,6 +88,14 @@ Hand it crafted context — **not** your session history. Require the rubric's o
 in `VERDICT: PASS/FAIL`.
 
 **Reviewer B — GPT cross-model (opencode bridge):**
+
+**Leaf deferral (per-task only).** If the caller signals this task is `[leaf]` (no dependents, no
+foundational surface — see `~/.claude/reference/model-policy.md`), **skip Reviewer B here**: its
+diff is covered by the cross-model pass at the integration review. Report `coverage: BATCHED` in
+the verdict so the deferral is visible, never silent. This applies to the **per-task** gate ONLY —
+at `--integration`, and for any `[L]` task, Reviewer B **always** runs. Not a leaf (or unsignaled)
+→ run it as below.
+
 ```bash
 timeout 900 opencode run --dir "$REPO" -m openai/gpt-5.5 --variant high --agent plan \
   "You are doing a READ-ONLY review — do not modify any files.
@@ -162,7 +170,7 @@ yagni/shrink`, ending `net: -N lines possible` or `Lean already. Ship.` This axi
 ```
 REVIEW: <feature> / <task|INTEGRATION since base>
   Verify: PASS <cmd> | FAIL (auto-FAIL) | NONE (no test command found)
-  Claude: <Crit/Imp/Min>   GPT: <Crit/Imp/Min>   [single-model if the cross-model bridge is unavailable]
+  Claude: <Crit/Imp/Min>   GPT: <Crit/Imp/Min | BATCHED to integration ([leaf] per-task) | single-model if the bridge is unavailable>
   Security (Reviewer C, --integration only): <P0/P1 blocking findings with file:line + slug | "none" | "n/a (per-task)">  (P2 advisory: <n>)
   Blocking: <Critical+Important findings with file:line, grouped by section, or "none">
   Leanness (advisory): <net: -N lines possible | Lean already>

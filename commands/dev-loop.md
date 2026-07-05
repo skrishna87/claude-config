@@ -64,7 +64,9 @@ Repeat until the plan has no unchecked tasks (or an orchestrator returns BLOCKED
    "dev-loop-orchestrator"`). Brief it with everything from step 2 plus: *"Advance this plan by
    exactly ONE task — the first unchecked — then return your ORCHESTRATOR RESULT block. Work only in
    <worktree>."* Include the next task's **tier tag** (`[S|M|L]` from its plan line; untagged = M)
-   — the orchestrator picks its implementer's model from it per `policyPath`. The orchestrator
+   — the orchestrator picks its implementer's model from it per `policyPath` — **and its `[leaf]`
+   marker if present** (a leaf task's per-task gate defers the cross-model pass to integration per
+   `policyPath`; the orchestrator returns `coverage: BATCHED` for it). The orchestrator
    itself always inherits your session model (never pass `model` on this spawn): its reviewers
    inherit from it, and verification is never downgraded. Hand it crafted context, not your
    session history.
@@ -85,6 +87,36 @@ Repeat until the plan has no unchecked tasks (or an orchestrator returns BLOCKED
 3. Keep your own per-iteration footprint minimal: trust the orchestrator's result + the on-disk state;
    you do not need to re-read the whole diff each loop.
 
+## 3a. Lanes — parallel execution (opt-in; default is the sequential loop above)
+
+Engages **only** when the plan declares **≥2 `[lane:<repo>]` groups** (see `/plan-feature` Stage 4).
+Otherwise ignore this section — run §3 sequentially. The safety rule is absolute: **a lane is a
+whole sub-repo.** Different sub-repos are different git repos with independent worktrees and
+branches, so their orchestrators can't touch the same files or race the same branch. **Never split
+one sub-repo across two lanes** (same branch, concurrent commits = corruption). If two lanes would
+share a repo, they're one lane.
+
+1. **Prefix first, sequentially.** Every task NOT tagged `[lane:*]` is the **foundational prefix**
+   (shared contracts, schema, whatever a cross-lane task is `blocked-by`). The slicer ordered these
+   first. Run them through the normal §3 loop until the next unchecked task is a `[lane:*]` task.
+   A prefix task that goes BLOCKED stops the whole run (lanes may depend on it) — same as §3.
+2. **One worktree+branch per lane.** For each lane's sub-repo, ensure its own
+   `.worktrees/<repo>/<branch>` per §1 (independent base sha + branch + publish; record each in
+   progress.md under a per-lane heading).
+3. **Advance lanes concurrently.** Each round: for every lane that still has an unchecked task and
+   isn't BLOCKED, spawn its next orchestrator (its worktree, its next task, `[leaf]`/tier as §3.1)
+   — **all in ONE message so they run in parallel.** Await all, read each ORCHESTRATOR RESULT, then
+   repeat. A lane that returns BLOCKED **pauses that lane only**; the others keep going. Keep the
+   per-lane `cycles`/coverage tallies separate. Loop until every lane is drained or blocked.
+4. **Barrier → §4.** When all lanes are drained, go to §4 — but the integration review runs **per
+   lane sub-repo** (each `git diff <lane-base>...HEAD` in its own worktree) plus, if the lanes share
+   a contract, one cross-repo composition pass. Any lane still BLOCKED at the barrier ⇒ no merge;
+   surface it. FF each lane's branch onto its own source only after the user confirms (§4 rules).
+
+Parallelism is a wall-clock optimization, not a safety change: every task still gets the full §3
+gate, and the integration barrier still holds. If in doubt whether two groups are truly
+independent sub-repos, don't lane them — sequential is always correct.
+
 ## 4. Integration review + hand off
 When every checklist item is checked, run the **whole-feature** integration review — the seam **and
 security** gate no single task diff can be (the specialist security axis, Reviewer C, runs *here*,
@@ -92,12 +124,17 @@ not in the per-task orchestrator gate — security is a whole-surface property).
 suite in the worktree first** (the plan's Verify commands) — a red suite is a FAIL before any
 reviewer spends a token. Then either spawn one orchestrator-style reviewer or follow
 `~/.claude/commands/review-task.md` with `--integration <base>` (scope = `git diff <base>...HEAD`).
+This pass runs the cross-model reviewer over the **whole** diff — so it is also the **backstop for
+every `[leaf]` task** whose per-task cross-model pass was deferred (`coverage: BATCHED`). It runs
+regardless; a run with zero leaves still gets it.
 - **FAIL** → seams don't hold. Surface the blockers, add fix tasks to `plan.md` (unchecked), keep
   looping (back to step 3). Do NOT offer to merge.
 - **PASS** → STOP. Summarize, and present the **advisory ledger**: every advisory from the run
   (Minors, security P2, leanness) with its disposition — taken / recorded (progress.md residual +
   fix one-liner) / dropped + reason — for the user to overrule before merge. An advisory with no
-  disposition is a gap, not a pass. Then show `git -C <worktree> log --oneline <base>..HEAD`, and tell the user:
+  disposition is a gap, not a pass. In the summary, **confirm every `coverage: BATCHED` (leaf) task
+  got its cross-model pass here** — a BATCHED task with no integration cross-model coverage is a
+  gap, not a pass. Then show `git -C <worktree> log --oneline <base>..HEAD`, and tell the user:
   do your final review / manual test; on your confirmation I'll fast-forward `<branch>` onto `<source>`
   (and push if you want). **Never FF or push without explicit confirmation.**
 - **After the confirmed FF** — ask about cleanup (never do it unprompted): remove the worktree

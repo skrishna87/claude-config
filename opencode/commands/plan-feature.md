@@ -115,6 +115,21 @@ Each task line: `- [ ] n. [S|M|L] <task> - *accept:* <criteria> - *blocked-by:* 
 mechanical/fully specified, M = normal slice, L = seam- or judgment-heavy) sets which model
 tier implements the task — classify honestly here, once; when torn, take the higher.
 
+**Mark cross-model gate timing (`[leaf]`).** Add `[leaf]` only when BOTH hold: (1) no later task
+is `blocked-by` it, and (2) it touches no foundational surface — auth/permission reach, a
+state-mutating write path, concurrency, or a cross-repo/reused contract. A `[leaf]` task batches
+its cross-model review to the integration gate instead of paying it per task (rationale + hard
+limits in `model-policy.md`); unmarked keeps the per-task cross-model pass. **Never `[leaf]` an
+`[L]` task.** When unsure, don't tag — per-task is the safe default.
+
+**Assign lanes (`[lane:<repo>]`) if the feature spans ≥2 sub-repos.** Partition into (a) a
+**foundational prefix** — shared contracts, schema, anything a task in *another* sub-repo is
+`blocked-by` — left untagged, runs first sequentially; and (b) one **lane per sub-repo** of the
+remaining independent tasks, each tagged `[lane:<repo>]`. In this flat port `/dev-loop` still
+executes lanes **sequentially** (no nested concurrency guarantee), but the tags document the
+partition and carry over if run under a nesting-capable driver. Single-repo feature → omit lane
+tags. A cross-repo contract task is prefix, never a lane member.
+
 **PAUSE.** Present the slice list: *granularity right? dependencies correct? anything to merge
 or split?* Iterate until approved.
 

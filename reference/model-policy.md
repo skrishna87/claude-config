@@ -45,6 +45,34 @@ Untagged tasks (plans written before this policy) = `M`.
 | Gate reviewers (both halves) | **strong — never below session** | Claude Code: inherit + GPT via opencode bridge (`openai/gpt-5.5 --variant high`, pinned) · opencode: `task-reviewer` (inherits) + `task-reviewer-cross` (pinned) |
 | Plan-gate, security, integration | strongest available | root-of-trust and whole-surface passes |
 
+## Cross-model gate timing — per-task vs batched (leaf deferral)
+
+The cross-model reviewer (Reviewer B / `task-reviewer-cross`) is the run's highest-value gate —
+in practice it drives nearly every fix cycle. It is never *skipped*; the only question is *when*
+it runs. Default: **per task**, on every task's diff, as the gate always has.
+
+A task the slicer tags **`[leaf]`** defers its cross-model pass to the integration review rather
+than paying it per task. `[leaf]` is an assertion the slicer must earn — **both** parts true:
+
+1. **No dependents** — no other plan task is `blocked-by` this one. A bug here can't propagate
+   into later tasks, so catching it at integration costs no rework distance.
+2. **No foundational surface** — it touches none of: auth / permission reach, a state-mutating
+   write path, concurrency, or a cross-repo / reused shared contract. These are exactly the
+   Stage-2 invariants a per-task cross-model pass exists to catch *early*.
+
+Effect: a `[leaf]` task's per-task gate still runs Reviewer A (self, full rubric incl. the
+Security check) + the verify suite; its diff is then covered by the cross-model Reviewer B at
+**integration**, which already reviews the whole `<base>...HEAD` diff — the leaf's code is in it.
+**Coverage is deferred, never dropped**, and the deferral is recorded (`coverage: BATCHED`), never
+silent. Tier the axis on **dependency position, not risk category**: the danger a per-task
+cross-model pass buys down is *propagation*, and a leaf has none.
+
+Hard limits: **never `[leaf]`-defer an `[L]` task** (L is seam/judgment-heavy by definition — it
+always gets cross-model eyes per task), and leaf deferral applies to the **per-task** gate only —
+the integration cross-model pass always runs. Unmarked = per task (today's behavior); when unsure,
+leave it unmarked. Rule 2 holds with data behind it: this changes *when* the cross-model pass runs,
+never *whether*, and never its pinned model.
+
 ## Ability table (personal calibration — vibes, update as models ship)
 
 Intelligence = how hard a problem you can hand it unsupervised. Taste = UI/UX, code quality,

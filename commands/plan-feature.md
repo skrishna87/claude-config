@@ -137,6 +137,22 @@ mechanical/fully specified, M = normal slice, L = seam- or judgment-heavy). This
 model tier implements it — classify honestly here, once, so the driver never has to guess;
 when torn between two tiers, take the higher.
 
+**Mark cross-model gate timing (`[leaf]`).** Add `[leaf]` to a task only when BOTH hold: (1) no
+later task is `blocked-by` it, and (2) it touches no foundational surface — auth/permission reach,
+a state-mutating write path, concurrency, or a cross-repo/reused contract. A `[leaf]` task batches
+its cross-model review to the integration gate instead of paying it per task (the rationale +
+hard limits are in `~/.claude/reference/model-policy.md`); everything unmarked keeps the per-task
+cross-model pass. **Never `[leaf]` an `[L]` task.** When unsure, don't tag — per-task is the safe
+default. This is a real lever: leaf UI/E2E slices are common and their per-task cross-model pass
+only re-covers what integration already will.
+
+**Assign lanes (`[lane:<repo>]`) if the feature spans ≥2 sub-repos.** Partition the tasks into
+(a) a **foundational prefix** — shared contracts, schema, anything a task in *another* sub-repo is
+`blocked-by` — left untagged so it runs first, sequentially; and (b) one **lane per sub-repo** of
+the remaining independent tasks, each tagged `[lane:<repo>]`. `/dev-loop` runs the lanes
+concurrently once the prefix lands (see its §3). A single-repo feature needs no lane tags — omit
+them and the loop stays sequential. Do not put a cross-repo contract task in a lane; it's prefix.
+
 > Slicing discipline adapted from Matt Pocock's `to-issues` skill (MIT), emitting a plan.md
 > checklist instead of tracker issues.
 

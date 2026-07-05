@@ -21,10 +21,15 @@
 ## Tasks
 <Each task = a vertical-slice tracer bullet: a thin path through every layer it touches,
 demoable on its own. Order by dependency. Tier [S|M|L]: S = mechanical, M = normal slice
-(default), L = seam/judgment-heavy - sets the implementing model's tier downstream.>
+(default), L = seam/judgment-heavy - sets the implementing model's tier downstream.
+Optional [leaf] = no dependents AND no foundational surface (auth/write-path/concurrency/
+cross-repo contract) -> its cross-model review batches to integration (model-policy.md); never on [L].
+Optional [lane:<repo>] = parallel-lane assignment for a multi-repo feature (see /dev-loop);
+omit for a single-repo/sequential plan.>
 - [ ] 1. [M] <task> - *accept:* <criteria that prove it> - *blocked-by:* <none | task n>
 - [ ] 2. [S] <task> - *accept:* <...> - *blocked-by:* <...>
 - [ ] 3. [L] <task> - *accept:* <...> - *blocked-by:* <...>
+- [ ] 4. [S][leaf] <leaf slice - per-task cross-model review deferred to integration> - *accept:* <...> - *blocked-by:* <...>
 
 ## Out of scope / deferred
 - <...>

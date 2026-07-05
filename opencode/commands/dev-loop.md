@@ -71,6 +71,11 @@ Repeat until the plan has no unchecked tasks (or a task goes BLOCKED):
 2. **Gate.** Follow `gatePath` (per-task scope, the unstaged diff): spawn `task-reviewer` and
    `task-reviewer-cross` in parallel with crafted briefs, consolidate, produce the verdict. If
    the cross provider is down → proceed but record `coverage: DEGRADED`, report loudly at end.
+   - **`[leaf]` task** (its plan line is tagged; no dependents + no foundational surface — see
+     `policyPath`): signal leaf to the gate → `task-reviewer-cross` is **deferred to integration**,
+     so spawn `task-reviewer` only and record `coverage: BATCHED` (a deliberate deferral, distinct
+     from DEGRADED). Per-task ONLY; **never for an `[L]` task**. The integration gate (§4) is its
+     cross-model backstop.
 3. **FAIL → fix loop (≤2 cycles).**
    - Snapshot first: `mkdir -p <worktree>/.dev-loop`, git-exclude it once
      (`EXCL="$(git -C <worktree> rev-parse --git-common-dir)/info/exclude"; grep -qxF
@@ -119,6 +124,12 @@ When every task is checked:
 
 ## Notes
 
+- **Lanes run sequentially in this flat port.** `[lane:<repo>]` tags (from `/plan-feature`) are
+  honored for *ordering* — foundational prefix first, then each lane's tasks — but this driver
+  does **not** run lanes concurrently (opencode gives no nested-spawn guarantee, and safe lane
+  parallelism needs concurrent orchestrators). Run the lanes one after another; the tags carry
+  over unchanged if the plan is later executed under the nesting-capable Claude Code driver, which
+  does parallelize them (its §3a). Correctness is identical either way — only wall-clock differs.
 - **Locked gate**: only `/review-task` + the shared rubric — no other reviewer tool — so
   results are reproducible across tasks and sessions.
 - **Provisional commits** live in the worktree; reshape with `git reset --soft <base>` before

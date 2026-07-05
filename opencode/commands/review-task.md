@@ -46,7 +46,11 @@ Spawn via the task tool, each with a crafted brief — repo path, the exact diff
 `planPath`, and the mode (full | re-review + findings + snapshot path). Never session history.
 
 - **`task-reviewer`** (same-model) — always.
-- **`task-reviewer-cross`** (pinned to a different provider) — always. If its provider is
+- **`task-reviewer-cross`** (pinned to a different provider) — always, **except** a per-task
+  `[leaf]` task (caller-signalled: no dependents, no foundational surface — see
+  `~/.config/opencode/dev-loop/reference/model-policy.md`): skip it here and report `coverage:
+  BATCHED`, its diff is covered by the cross-model pass at integration. Leaf deferral is per-task
+  ONLY — at `--integration`, and for any `[L]` task, it always runs. If its provider is
   down/unauthed, proceed single-model but **explicitly flag coverage as DEGRADED** — never
   silently drop the cross-model half.
 - **`security-reviewer`** — `--integration` mode ONLY. Security is a whole-surface property;
@@ -77,7 +81,7 @@ Spawn via the task tool, each with a crafted brief — repo path, the exact diff
 ```
 REVIEW: <feature> / <task|INTEGRATION since base>
   Verify: PASS <cmd> | FAIL (auto-FAIL) | NONE
-  same-model: <Crit/Imp/Min>   cross-model: <Crit/Imp/Min>   [DEGRADED if cross unavailable]
+  same-model: <Crit/Imp/Min>   cross-model: <Crit/Imp/Min | BATCHED to integration ([leaf] per-task) | DEGRADED if unavailable>
   Security (integration only): <P0/P1 findings with file:line + slug | "none" | "n/a (per-task)">  (P2 advisory: <n>)
   Blocking: <Critical+Important findings with file:line, grouped by section, or "none">
   Leanness (advisory): <net: -N lines possible | Lean already>
