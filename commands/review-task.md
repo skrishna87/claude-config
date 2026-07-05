@@ -97,18 +97,26 @@ at `--integration`, and for any `[L]` task, Reviewer B **always** runs. Not a le
 → run it as below.
 
 ```bash
-timeout 900 opencode run --dir "$REPO" -m openai/gpt-5.5 --variant high --agent plan \
-  "You are doing a READ-ONLY review — do not modify any files.
+timeout 900 opencode run --dir "$REPO" -m openai/gpt-5.5 --variant high --agent plan --format json \
+  "You are doing a READ-ONLY review — do not modify any files, and do not read any file outside this repo.
 
 $(cat ~/.claude/rubrics/per-task-review.md)
 
 Run 'git diff' (or 'git diff <base>...HEAD' for an integration review) to see the changes and
 review ONLY those, against the plan at .dev-loop/plan.md (read it — it holds the acceptance
 criteria, seam map, and MUST-NOTs for this work). Trace how they compose with the flows they join
-and check twin-path symmetry." > /tmp/cross-review.md 2>&1
+and check twin-path symmetry." > /tmp/cross-review.ndjson 2>/tmp/cross-review.err
+# Extract the assistant's prose (findings + VERDICT). MUST use --format json + this jq:
+jq -r 'select(.type=="text") | .part.text' /tmp/cross-review.ndjson > /tmp/cross-review.md
 ```
-Then read `/tmp/cross-review.md` — the findings + verdict are at the END, after the streamed
-tool-call log.
+Then read `/tmp/cross-review.md` — the concatenated review text, ending in the `VERDICT:` line.
+- **`--format json` is mandatory, not optional.** opencode's *default* formatted output renders the
+  final assistant message in a TUI live-region that is DROPPED when stdout is redirected to a file —
+  so `> file 2>&1` captures the streamed tool-call log but not the findings/verdict, and the gate
+  silently churns through retries + the whole fallback chain on a phantom "no-output" failure. JSON
+  mode emits each text chunk as an NDJSON `{"type":"text",...,"part":{"text":...}}` line that
+  survives redirection; the jq above reassembles them. If `/tmp/cross-review.md` is empty after this,
+  it's a real failure (check `/tmp/cross-review.err` + exit code) — not the capture bug.
 - The model is **pinned**: `openai/gpt-5.5 --variant high`. Benchmarked 2026-07-03 on a real gate
   diff: 5.5-high was the fastest AND best-calibrated (~3 min); gpt-5.4-high was 2× slower and
   over-escalated; 5.5-fast bought nothing. Never tier the cross-model reviewer down.
