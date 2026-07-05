@@ -97,15 +97,18 @@ at `--integration`, and for any `[L]` task, Reviewer B **always** runs. Not a le
 → run it as below.
 
 ```bash
-timeout 900 opencode run --dir "$REPO" -m openai/gpt-5.5 --variant high --agent plan --format json \
-  "You are doing a READ-ONLY review — do not modify any files, and do not read any file outside this repo.
+timeout 300 opencode run --dir "$REPO" -m openai/gpt-5.5 --agent plan --format json \
+  "You are doing a READ-ONLY, STATIC review — do not modify any files, and do not read any file
+outside this repo. Do NOT run the test suite, builds, or any long-running command: a separate
+Verify step already ran the tests, so your job is to read the diff + plan and reason. Use only
+fast reads (git diff, cat).
 
 $(cat ~/.claude/rubrics/per-task-review.md)
 
 Run 'git diff' (or 'git diff <base>...HEAD' for an integration review) to see the changes and
 review ONLY those, against the plan at .dev-loop/plan.md (read it — it holds the acceptance
 criteria, seam map, and MUST-NOTs for this work). Trace how they compose with the flows they join
-and check twin-path symmetry." > /tmp/cross-review.ndjson 2>/tmp/cross-review.err
+and check twin-path symmetry. End with the VERDICT line." > /tmp/cross-review.ndjson 2>/tmp/cross-review.err
 # Extract the assistant's prose (findings + VERDICT). MUST use --format json + this jq:
 jq -r 'select(.type=="text") | .part.text' /tmp/cross-review.ndjson > /tmp/cross-review.md
 ```
@@ -117,15 +120,23 @@ Then read `/tmp/cross-review.md` — the concatenated review text, ending in the
   mode emits each text chunk as an NDJSON `{"type":"text",...,"part":{"text":...}}` line that
   survives redirection; the jq above reassembles them. If `/tmp/cross-review.md` is empty after this,
   it's a real failure (check `/tmp/cross-review.err` + exit code) — not the capture bug.
-- The model is **pinned**: `openai/gpt-5.5 --variant high`. Benchmarked 2026-07-03 on a real gate
-  diff: 5.5-high was the fastest AND best-calibrated (~3 min); gpt-5.4-high was 2× slower and
-  over-escalated; 5.5-fast bought nothing. Never tier the cross-model reviewer down.
+- **Model pinned to `openai/gpt-5.5` at DEFAULT variant — NEVER add `--variant high`.** Reasoning
+  effort is a separate axis from the model. Re-benchmarked 2026-07-05 on a real 413-line gate diff:
+  `--variant high` spent **600s emitting zero stream bytes and never returned** (opencode does not
+  stream thinking tokens, so a long silent-reasoning phase is indistinguishable from a wedged
+  process — this was the "15-min hang" that made the gate unusable). Default variant: **first byte
+  in 2s, done in 86s, verdict PASS, calibration intact** (independently caught a real untested-branch
+  MINOR). `minimal` was equivalent (~88s) but shallower. So: keep the model, drop the variant. The
+  static-review preamble ("do NOT run tests/builds") keeps tool count low — the reviewer re-running
+  `pytest` was a second latency/silent-gap source (Verify already ran the suite upstream).
 - `--dir "$REPO"` runs it inside the worktree (so `.dev-loop/plan.md` resolves where the
   mono-root `docs/<feature>/plan.md` would not); `--agent plan` is opencode's built-in read-only
-  agent — edits are denied at the permission layer, not just by instruction.
+  agent — edits are denied at the permission layer, not just by instruction (it CAN still run
+  bash/tests, hence the static-review preamble telling it not to).
 - **FOREGROUND with the `timeout` shown — NEVER background-and-poll** (a backgrounded run can die
   silently and the poll never returns; this burned a real run). Check the exit code; on non-zero
-  or timeout, retry once, then fall back.
+  or timeout, retry once, then fall back. A healthy default-variant review is ~90s, so a run pinned
+  at the 300s timeout is a real stall, not slow reasoning — retry, then fall back; don't raise it.
 - Fallback chain: opencode unavailable/unauthed → `codex exec -C "$REPO" -s read-only -o
   /tmp/cross-review.md "<same prompt>"` (foreground + timeout, same rule; on hosts where codex's
   bwrap sandbox is blocked by apparmor userns restrictions, `-s danger-full-access` plus the

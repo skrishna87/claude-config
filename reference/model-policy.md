@@ -42,7 +42,7 @@ Untagged tasks (plans written before this policy) = `M`.
 | Implementer, `[S]`/`[M]` task | **budget** | Claude Code: spawn implementer subagent with `model: sonnet` · opencode: `task-implementer-lite` |
 | Implementer, `[L]` task | session model | Claude Code: omit `model` (inherit) · opencode: `task-implementer` |
 | Fix cycles | per rule 4 | escalate on `design`/`semantics` cause |
-| Gate reviewers (both halves) | **strong — never below session** | Claude Code: inherit + GPT via opencode bridge (`openai/gpt-5.5 --variant high`, pinned) · opencode: `task-reviewer` (inherits) + `task-reviewer-cross` (pinned) |
+| Gate reviewers (both halves) | **strong — never below session** | Claude Code: inherit + GPT via opencode bridge (`openai/gpt-5.5`, pinned, **default variant — never `--variant high`**) · opencode: `task-reviewer` (inherits) + `task-reviewer-cross` (pinned) |
 | Plan-gate, security, integration | strongest available | root-of-trust and whole-surface passes |
 
 ## Cross-model gate timing — per-task vs batched (leaf deferral)
@@ -86,12 +86,19 @@ API design, copy. **Cost is per-harness, not universal** — it reflects what YO
 | gpt-5.5 | 8 | 5 | ~free (opencode/codex ChatGPT OAuth) | sub-priced via ChatGPT OAuth; API otherwise |
 | OSS (deepseek-v4, glm-5.x, qwen) | test-driving | test-driving | n/a | cheapest — opencode gateway/OpenRouter/local |
 
-**Cross-model reviewer pin — measured, don't re-tier.** Benchmark 2026-07-03 (identical review
-prompt, real gate diff, all `--variant high` via `opencode run --agent plan`): gpt-5.5 = 3m02s,
-fastest and best-calibrated; gpt-5.5-fast = 3m18s, no gain; gpt-5.4 = 5m55s, 2× slower AND
-over-escalated a Minor to a blocking Important. Down-tiering the reviewer buys negative speed
-and worse calibration — the pin stays `openai/gpt-5.5 --variant high` for every gate
-(per-task, integration, plan-gate). Rule 2 applies with data behind it.
+**Cross-model reviewer pin — measured, don't re-tier the MODEL; run it at DEFAULT variant.**
+The model pin is `openai/gpt-5.5` for every gate (per-task, integration, plan-gate); down-tiering
+to gpt-5.4 buys negative speed and worse calibration (2026-07-03: gpt-5.4 = 5m55s, 2× slower AND
+over-escalated a Minor to a blocking Important). But **reasoning variant is a separate axis, and
+`--variant high` is banned.** Re-benchmark 2026-07-05 (real 413-line gate diff, `opencode run
+--agent plan --format json`): `--variant high` emitted **zero stream bytes for 600s and never
+returned** (opencode doesn't stream thinking, so long silent reasoning == indistinguishable from a
+hung process — this was the "15-min hang" that made the gate unusable and would kill adoption).
+**Default variant: first byte 2s, done 86s, verdict PASS, calibration intact** (caught a real
+untested-branch Minor); `minimal` ~88s but shallower. So the pin is `openai/gpt-5.5` at default
+variant + a 300s (plan-gate 480s) fail-fast timeout + the static-review preamble (no test re-runs).
+The 2026-07-03 numbers were all `--variant high`; treat them as model-vs-model only, not variant
+guidance. Rule 2 (never down-tier the model) still holds — with data behind it.
 
 ## Test-driving OSS / other labs (opencode)
 

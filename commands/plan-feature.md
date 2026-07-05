@@ -208,8 +208,10 @@ cp "<abs>/docs/<feature>/plan.md" "$REPO/.dev-loop/plan.md"
 Then:
 
 ```bash
-timeout 900 opencode run --dir "$REPO" -m openai/gpt-5.5 --variant high --agent plan \
-  "You are doing a READ-ONLY audit — do not modify any files.
+timeout 480 opencode run --dir "$REPO" -m openai/gpt-5.5 --agent plan --format json \
+  "You are doing a READ-ONLY audit — do not modify any files. Use fast reads only (git, cat, grep);
+do not run builds or the test suite. (Reading dependency sources outside the repo IS in scope for
+this audit — see point 8 — but nothing else outside it.)
 
 Review the feature plan at .dev-loop/plan.md against THIS repo's actual code. There is no
 diff yet — you are auditing whether the plan is grounded, before implementation. Check, with
@@ -238,13 +240,15 @@ file:line evidence for every claim:
    sources outside the repo is in scope for this audit. If the dependency isn't present
    locally, report the pin as unverified, not sound.
 Report each finding as High/Medium/Low with file:line and what the plan should say instead.
-If the plan is sound, say so plainly — do not invent findings." > /tmp/plan-review.md 2>&1
+If the plan is sound, say so plainly — do not invent findings." > /tmp/plan-review.ndjson 2>/tmp/plan-review.err
+jq -r 'select(.type=="text") | .part.text' /tmp/plan-review.ndjson > /tmp/plan-review.md
 ```
 
-Then read `/tmp/plan-review.md` (findings at the END, after the streamed tool-call log).
-Bridge rules are `/review-task` §4 Reviewer B's: model pinned `openai/gpt-5.5 --variant high`,
-FOREGROUND with the timeout (never background-and-poll), retry once on failure, then the codex
-fallback chain.
+Then read `/tmp/plan-review.md` — the extracted findings, ending with the audit's summary.
+Bridge rules are `/review-task` §4 Reviewer B's: model pinned `openai/gpt-5.5` at **default variant**
+(NEVER `--variant high` — it silent-reasons for 10min+ and never returns; see §4), `--format json` +
+the `jq` extraction (default output drops the message on redirect), FOREGROUND with the timeout
+(never background-and-poll), retry once on failure, then the codex fallback chain.
 
 Then **adjudicate**: verify each finding against the code yourself before acting — the auditor
 can be wrong too (the `/review-task` §5 disagreement discipline applies). Fix the plan for every
