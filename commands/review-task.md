@@ -108,18 +108,24 @@ $(cat ~/.claude/rubrics/per-task-review.md)
 Run 'git diff' (or 'git diff <base>...HEAD' for an integration review) to see the changes and
 review ONLY those, against the plan at .dev-loop/plan.md (read it — it holds the acceptance
 criteria, seam map, and MUST-NOTs for this work). Trace how they compose with the flows they join
-and check twin-path symmetry. End with the VERDICT line." > /tmp/cross-review.ndjson 2>/tmp/cross-review.err
+and check twin-path symmetry. End with the VERDICT line." > "$REPO/.dev-loop/cross-review.ndjson" 2>"$REPO/.dev-loop/cross-review.err"
 # Extract the assistant's prose (findings + VERDICT). MUST use --format json + this jq:
-jq -r 'select(.type=="text") | .part.text' /tmp/cross-review.ndjson > /tmp/cross-review.md
+jq -r 'select(.type=="text") | .part.text' "$REPO/.dev-loop/cross-review.ndjson" > "$REPO/.dev-loop/cross-review.md"
 ```
-Then read `/tmp/cross-review.md` — the concatenated review text, ending in the `VERDICT:` line.
+Then read `$REPO/.dev-loop/cross-review.md` — the concatenated review text, ending in the `VERDICT:` line.
+- **Scratch lives in `$REPO/.dev-loop/`, NEVER `/tmp`.** `/tmp/cross-review.*` is a single machine-global
+  path — two loops on different projects (or two parallel lanes) would clobber each other's review and
+  one gate could adjudicate another's findings against the wrong diff (a silent wrong PASS). `.dev-loop/`
+  is per-worktree (the loop's isolation boundary) and git-excluded, so every concurrent gate is isolated.
+  The caller archives each result per fixed-point (`reviews/task<n>.cycle<k>.cross.md`) so it accumulates
+  as run telemetry the miner/logger ingests — see the orchestrator's gate step.
 - **`--format json` is mandatory, not optional.** opencode's *default* formatted output renders the
   final assistant message in a TUI live-region that is DROPPED when stdout is redirected to a file —
   so `> file 2>&1` captures the streamed tool-call log but not the findings/verdict, and the gate
   silently churns through retries + the whole fallback chain on a phantom "no-output" failure. JSON
   mode emits each text chunk as an NDJSON `{"type":"text",...,"part":{"text":...}}` line that
-  survives redirection; the jq above reassembles them. If `/tmp/cross-review.md` is empty after this,
-  it's a real failure (check `/tmp/cross-review.err` + exit code) — not the capture bug.
+  survives redirection; the jq above reassembles them. If `$REPO/.dev-loop/cross-review.md` is empty
+  after this, it's a real failure (check `$REPO/.dev-loop/cross-review.err` + exit code) — not the capture bug.
 - **Model pinned to `openai/gpt-5.5` at DEFAULT variant — NEVER add `--variant high`.** Reasoning
   effort is a separate axis from the model. Re-benchmarked 2026-07-05 on a real 413-line gate diff:
   `--variant high` spent **600s emitting zero stream bytes and never returned** (opencode does not
@@ -138,7 +144,7 @@ Then read `/tmp/cross-review.md` — the concatenated review text, ending in the
   or timeout, retry once, then fall back. A healthy default-variant review is ~90s, so a run pinned
   at the 300s timeout is a real stall, not slow reasoning — retry, then fall back; don't raise it.
 - Fallback chain: opencode unavailable/unauthed → `codex exec -C "$REPO" -s read-only -o
-  /tmp/cross-review.md "<same prompt>"` (foreground + timeout, same rule; on hosts where codex's
+  "$REPO/.dev-loop/cross-review.md" "<same prompt>"` (foreground + timeout, same rule; on hosts where codex's
   bwrap sandbox is blocked by apparmor userns restrictions, `-s danger-full-access` plus the
   READ-ONLY preamble is the user-authorized workaround; if codex errors on git, retry once with
   `--skip-git-repo-check`). If neither bridge works, proceed with Reviewer A alone but

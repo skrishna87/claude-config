@@ -240,11 +240,13 @@ file:line evidence for every claim:
    sources outside the repo is in scope for this audit. If the dependency isn't present
    locally, report the pin as unverified, not sound.
 Report each finding as High/Medium/Low with file:line and what the plan should say instead.
-If the plan is sound, say so plainly — do not invent findings." > /tmp/plan-review.ndjson 2>/tmp/plan-review.err
-jq -r 'select(.type=="text") | .part.text' /tmp/plan-review.ndjson > /tmp/plan-review.md
+If the plan is sound, say so plainly — do not invent findings." > "$REPO/.dev-loop/plan-review.ndjson" 2>"$REPO/.dev-loop/plan-review.err"
+jq -r 'select(.type=="text") | .part.text' "$REPO/.dev-loop/plan-review.ndjson" > "$REPO/.dev-loop/plan-review.md"
 ```
 
-Then read `/tmp/plan-review.md` — the extracted findings, ending with the audit's summary.
+Then read `$REPO/.dev-loop/plan-review.md` — the extracted findings, ending with the audit's summary.
+(Scratch lives in `$REPO/.dev-loop/`, never `/tmp` — a machine-global path would collide across
+concurrent loops on different projects; `.dev-loop/` is per-worktree and git-excluded.)
 Bridge rules are `/review-task` §4 Reviewer B's: model pinned `openai/gpt-5.5` at **default variant**
 (NEVER `--variant high` — it silent-reasons for 10min+ and never returns; see §4), `--format json` +
 the `jq` extraction (default output drops the message on redirect), FOREGROUND with the timeout

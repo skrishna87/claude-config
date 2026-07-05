@@ -87,6 +87,16 @@ done and gated either way — delegation is an optimization, not a requirement. 
      Not a leaf → run the full A/B/D gate as above. (The per-task gate is A/B/D — your security
    coverage is A/B's rubric Security check; the **specialist security axis is integration-only**, run
    by the driver in step 4, not here, since security is a whole-surface property.)
+   - **Archive each gate result as telemetry** (don't let the next cycle/task overwrite it). After
+     every gate run, preserve the cross-model output per task+cycle:
+     `mkdir -p "<worktree>/.dev-loop/reviews"` then
+     `cp "<worktree>/.dev-loop/cross-review.md" "<worktree>/.dev-loop/reviews/task<n>.cycle<k>.cross.md"`
+     (`<k>` = fix-cycle index, 0 for the first pass). These per-task/per-cycle review files — plus your
+     ORCHESTRATOR RESULT block, which you also write to `reviews/task<n>.result.md` in step 7 — are
+     **durable structured run telemetry**: the miner/live-logger reads them at run-end (before the §4
+     post-FF cleanup ask) as a clean source, instead of scraping the fragile prose in the transcript.
+     They live under the git-excluded `.dev-loop/` and are removed with the worktree at cleanup, once
+     telemetry is captured.
 
 5. **Fix loop (≤2 cycles).** If the gate FAILs, delegate/run a fix for the blocking findings,
    re-run verify (step 3), then re-gate. Bounded at **2** fix→review cycles. Still failing → go to
@@ -131,6 +141,10 @@ ORCHESTRATOR RESULT
   blocking: <"; "-joined Critical/Important findings, or "none">
   notes: <delegated|inline; pushed|push-failed|unpublished; anything the driver/human should know>
 ```
+
+Also write this exact block to `<worktree>/.dev-loop/reviews/task<n>.result.md` (same
+git-excluded dir as the archived reviews) — it is the miner/logger's clean Tier-B source, so it
+never has to reconstruct `cycles`/`cycle-cause`/`coverage` from transcript prose.
 
 Do not offer to merge, do not run the integration review, do not touch the source branch — those
 are the driver's job. One task, then return.
