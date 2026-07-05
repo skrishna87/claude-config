@@ -132,6 +132,29 @@ For each slice give: a one-line title, **acceptance criteria** (the checks that 
 **blocked-by** (earlier slices it needs), in the plan.md task format. Keep slices small enough
 that one is a healthy `/dev-loop` task — when in doubt, split.
 
+**Pin the seam, not just the task — kill `semantics` fix-cycles.** The loop's dominant
+*avoidable* churn is `cycle-cause: semantics`: a context-isolated implementer misreading a
+reused contract (a status code, a sentinel, zero-vs-null). Making slices *bigger* worsens this;
+the fix is per-task **density** — co-locate each trap with the task that trips it, so a
+fresh-context worker can't guess:
+- **`interfaces:`** — for the seam this slice crosses, the exact signature it **consumes** and
+  **produces** (function / endpoint / type + shape), lifted straight from Stage 2's pinned
+  symbols. The real signature, not prose like "calls the parser".
+- **Concrete-value acceptance** — every acceptance clause names the *exact* expected value: the
+  status code, sentinel, enum variant, zero-vs-null, count. Never a placeholder ("handles it
+  correctly", "works as expected"). If Stage 2 read a reused-contract semantic this slice leans
+  on, restate that exact value in the clause.
+
+This is added specification density, deliberately **not** bigger tasks (slices stay
+vertical-thin) and **not** code-in-the-plan (the implementer writes the code; the plan pins the
+*meaning*). Task shape:
+
+```
+- [ ] n. [tier] <title> — *blocked-by:* <none | n>
+  - *interfaces:* consumes `<sig>` · produces `<sig>`
+  - *accept:* <clause with an exact value>; <clause with an exact value>
+```
+
 **Tag every task with a tier `[S|M|L]`** per `~/.claude/reference/model-policy.md` (S =
 mechanical/fully specified, M = normal slice, L = seam- or judgment-heavy). This sets which
 model tier implements it — classify honestly here, once, so the driver never has to guess;

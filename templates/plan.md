@@ -27,11 +27,22 @@ sets the implementer's model tier; untagged = M.
 Optional [leaf] = no dependents AND no foundational surface (auth/write-path/concurrency/
 cross-repo contract) → its cross-model review batches to integration (model-policy.md); never on [L].
 Optional [lane:<repo>] = parallel-lane assignment for a multi-repo feature (see /dev-loop §3);
-omit for a single-repo/sequential plan.>
-- [ ] 1. [M] <task> — *accept:* <criteria that prove it> — *blocked-by:* <none | task n>
-- [ ] 2. [S] <task> — *accept:* <…> — *blocked-by:* <…>
-- [ ] 3. [L] <task> — *accept:* <…> — *blocked-by:* <…>
-- [ ] 4. [S][leaf] <leaf slice — per-task cross-model review deferred to integration> — *accept:* <…> — *blocked-by:* <…>
+omit for a single-repo/sequential plan.
+Per task, to starve `semantics` fix-cycles: *interfaces:* = the exact consume/produce signatures
+of the seam it crosses (from the Seam map, not prose); *accept:* clauses name EXACT expected
+values (status code, sentinel, enum, zero-vs-null, count) — never "handles it correctly".>
+- [ ] 1. [M] <title> — *blocked-by:* <none | task n>
+  - *interfaces:* consumes `<sig>` · produces `<sig>`
+  - *accept:* <clause with an exact value>; <clause with an exact value>
+- [ ] 2. [S] <title> — *blocked-by:* <…>
+  - *interfaces:* consumes `<sig>` · produces `<sig>`
+  - *accept:* <exact-value clause>; <exact-value clause>
+- [ ] 3. [L] <title> — *blocked-by:* <…>
+  - *interfaces:* consumes `<sig>` · produces `<sig>`
+  - *accept:* <exact-value clause>
+- [ ] 4. [S][leaf] <leaf slice — per-task cross-model review deferred to integration> — *blocked-by:* <…>
+  - *interfaces:* consumes `<sig>` · produces `<sig>`
+  - *accept:* <exact-value clause>
 
 ## Out of scope / deferred
 - <...>

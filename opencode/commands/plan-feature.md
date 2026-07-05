@@ -109,7 +109,29 @@ Break the plan into **tracer-bullet vertical slices** in plan.md's **Tasks** che
 - Any prefactoring ("make the change easy, then make the easy change") is its own first slice.
 - Order by dependency; when in doubt about size, split.
 
-Each task line: `- [ ] n. [S|M|L] <task> - *accept:* <criteria> - *blocked-by:* <none | task n>`
+Each task's tickable line is `- [ ] n. [S|M|L] <title> - *blocked-by:* <none | task n>`, with
+its `interfaces:` and `accept:` as indented sub-bullets (shape below).
+
+**Pin the seam, not just the task - kill `semantics` fix-cycles.** The loop's dominant
+*avoidable* churn is `cycle-cause: semantics`: a context-isolated implementer misreading a
+reused contract (a status code, a sentinel, zero-vs-null). Making slices *bigger* worsens this;
+the fix is per-task **density** - co-locate each trap with the task that trips it:
+- **`interfaces:`** - for the seam this slice crosses, the exact signature it **consumes** and
+  **produces** (function / endpoint / type + shape), lifted from Stage 2's pinned symbols. The
+  real signature, not prose like "calls the parser".
+- **Concrete-value acceptance** - every acceptance clause names the *exact* expected value: the
+  status code, sentinel, enum variant, zero-vs-null, count. Never a placeholder ("handles it
+  correctly"). If Stage 2 read a reused-contract semantic this slice leans on, restate that exact
+  value in the clause.
+
+Added specification density, deliberately **not** bigger tasks (slices stay vertical-thin) and
+**not** code-in-the-plan (the implementer writes code; the plan pins *meaning*). Task shape:
+
+```
+- [ ] n. [tier] <title> - *blocked-by:* <none | n>
+  - *interfaces:* consumes `<sig>` · produces `<sig>`
+  - *accept:* <clause with an exact value>; <clause with an exact value>
+```
 
 **The tier tag `[S|M|L]`** (per `~/.config/opencode/dev-loop/reference/model-policy.md`: S =
 mechanical/fully specified, M = normal slice, L = seam- or judgment-heavy) sets which model
