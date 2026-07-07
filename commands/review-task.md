@@ -107,21 +107,38 @@ alongside `coverage:`.
 plan-feature stage 5) writes `$REPO/.dev-loop/bridge-ok` — the live legs, one per line, in chain
 order. Present → run only the listed legs (the others were probed dead at run start; don't
 rediscover mid-gate). Absent (standalone invocation) → probe for yourself before the first gate:
-`timeout 60 opencode run -m openai/gpt-5.5 --format json "reply OK"`; leg 2 exists only if
+`timeout 60 opencode run --dir "$REPO" -m openai/gpt-5.5 --format json "reply OK" < /dev/null`; leg 2 exists only if
 `opencode models | grep -qx 'github-copilot/gpt-5.5'` (personal Copilot seats don't serve gpt-5.5 —
 that leg is org-seat-machines-only; NEVER substitute a lesser copilot model).
 
 **Concurrency + retry laws (bind every leg):**
+- **stdin law — `< /dev/null` on EVERY opencode invocation, mandatory.** opencode ≥ 1.17.15
+  (upgraded 2026-07-07) blocks reading inherited stdin on a non-TTY — it waits for EOF forever and
+  writes 0 bytes, exactly codex's known hang mode. Without the redirect the wedge is
+  DETERMINISTIC, not intermittent: retries and provider switches can't escape it (2026-07-07
+  addendum audit: both opencode legs 0-byte-wedged, codex — which has its `< /dev/null` — worked).
+  Corollary: a probe only proves a leg if it runs in the SAME invocation shape as the gates
+  (`--dir`, `< /dev/null`, same redirects) — a bare probe can pass on stdin luck while every gate
+  wedges.
 - **Never run two headless opencode gates concurrently on one machine** — concurrent instances can
   wedge each other via shared state under `~/.local/share/opencode/` (2026-07-06 incident: two
   parallel stage-5 gates both stalled; retries in fresh processes hung too while the sibling
   process lived; serial runs worked). Multi-repo / multi-lane gates run serially.
 - **Liveness rule — a zero-byte run is dead at 60s, don't wait out the timeout.** A healthy
-  `--format json` run writes its first event lines within ~5s; every observed init-wedge
-  (2026-07-06, both machines) produced ZERO bytes forever. So run the leg in the background of its
-  own shell command, poll the output file, and kill at 60s if it is still 0 bytes — that's the
-  attempt, proceed per the retry law. Output growing → leave it alone until the real timeout (a
-  long reviewer think is not a wedge; the ndjson tool-call lines show it reading).
+  `--format json` run writes its first event lines within ~5s; every observed wedge (2026-07-06
+  intermittent init-hang, 2026-07-07 stdin block) produced ZERO bytes forever. The 60s kill applies
+  to EVERY attempt **including the first** — the 2026-07-07 addendum audit burned a full 480s on
+  attempt 1 because the kill was applied only to the retry. Canonical shape, ONE shell command
+  (the `timeout` stays as the hard cap; the `wait` surfaces the exit code, so nothing dies
+  silently):
+  ```bash
+  timeout 300 opencode run ... < /dev/null > "$OUT" 2>"$ERR" & PID=$!
+  for i in $(seq 1 12); do sleep 5; kill -0 $PID 2>/dev/null || break; [ -s "$OUT" ] && break; done
+  [ ! -s "$OUT" ] && kill -0 $PID 2>/dev/null && kill $PID   # still 0 bytes at 60s = wedged, kill
+  wait $PID; EXIT=$?
+  ```
+  Output growing → leave it alone until the real timeout (a long reviewer think is not a wedge;
+  the ndjson tool-call lines show it reading); that's the attempt, proceed per the retry law.
 - On timeout or non-zero exit: retry ONCE with the **verbatim same command** — same timeout, but
   redirect the retry to `cross-review.retry.ndjson` (a DISTINCT file: the retry must leave
   physical evidence it ran — a 2026-07-06 demo run reported a retry that file mtimes disprove). A
@@ -143,7 +160,7 @@ $(cat ~/.claude/rubrics/per-task-review.md)
 Run 'git diff' (or 'git diff <base>...HEAD' for an integration review) to see the changes and
 review ONLY those, against the plan at .dev-loop/plan.md (read it — it holds the acceptance
 criteria, seam map, and MUST-NOTs for this work). Trace how they compose with the flows they join
-and check twin-path symmetry. End with the VERDICT line." > "$REPO/.dev-loop/cross-review.ndjson" 2>"$REPO/.dev-loop/cross-review.err"
+and check twin-path symmetry. End with the VERDICT line." < /dev/null > "$REPO/.dev-loop/cross-review.ndjson" 2>"$REPO/.dev-loop/cross-review.err"
 # Extract the assistant's prose (findings + VERDICT). MUST use --format json + this jq:
 jq -r 'select(.type=="text") | .part.text' "$REPO/.dev-loop/cross-review.ndjson" > "$REPO/.dev-loop/cross-review.md"
 ```
@@ -175,10 +192,13 @@ Then read `$REPO/.dev-loop/cross-review.md` — the concatenated review text, en
   mono-root `docs/<feature>/plan.md` would not); `--agent plan` is opencode's built-in read-only
   agent — edits are denied at the permission layer, not just by instruction (it CAN still run
   bash/tests, hence the static-review preamble telling it not to).
-- **FOREGROUND with the `timeout` shown — NEVER background-and-poll** (a backgrounded run can die
-  silently and the poll never returns; this burned a real run). Check the exit code; on non-zero
-  or timeout, retry once, then fall back. A healthy default-variant review is ~90s, so a run pinned
-  at the 300s timeout is a real stall, not slow reasoning — retry, then fall back; don't raise it.
+- **Run it in the liveness shape above — one shell command that backgrounds the `timeout`-wrapped
+  leg, applies the 60s zero-byte kill, and `wait`s for the exit code.** Never
+  background-and-walk-away without the `wait` (a run whose exit code nobody collects can die
+  silently and a naive poll never returns; this burned a real run). Check the exit code; on
+  non-zero or timeout, retry once, then fall back. A healthy default-variant review is ~90s, so a
+  run pinned at the 300s timeout is a real stall, not slow reasoning — retry, then fall back;
+  don't raise it.
 **opencode github-copilot leg (provider-switch retry):** primary leg dead AND
 `github-copilot/gpt-5.5` in the `bridge-ok` marker (or in `opencode models`) → the **identical
 command with only the model flag changed**: `-m github-copilot/gpt-5.5`. Same prompt, same

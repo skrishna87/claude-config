@@ -207,8 +207,10 @@ cp "<abs>/docs/<feature>/plan.md" "$REPO/.dev-loop/plan.md"
 
 Then run the audit through the bridge chain (§ Bridge chain in
 `~/.claude/reference/model-policy.md`). **Preflight first, before any audit runs**: one serialized
-`timeout 60 opencode run -m openai/gpt-5.5 --format json "reply OK"` — it absorbs the cold-start
-OAuth refresh and proves auth+model resolve. Write the live legs to `$REPO/.dev-loop/bridge-ok`,
+`timeout 60 opencode run --dir "$REPO" -m openai/gpt-5.5 --format json "reply OK" < /dev/null` —
+it absorbs the cold-start OAuth refresh and proves auth+model resolve **in the gate's own
+invocation shape** (`--dir` + `< /dev/null`; opencode ≥ 1.17.15 blocks forever on inherited stdin
+on a non-TTY — 2026-07-07 — so a bare probe can pass while every gate wedges). Write the live legs to `$REPO/.dev-loop/bridge-ok`,
 one per line in chain order (`openai/gpt-5.5` if the probe answered; `github-copilot/gpt-5.5` iff
 `opencode models | grep -qx 'github-copilot/gpt-5.5'`). **Multi-repo plan → run the per-repo
 audits SERIALLY — never two headless opencode runs at once on a machine** (concurrent instances
@@ -250,7 +252,7 @@ file:line evidence for every claim:
    sources outside the repo is in scope for this audit. If the dependency isn't present
    locally, report the pin as unverified, not sound.
 Report each finding as High/Medium/Low with file:line and what the plan should say instead.
-If the plan is sound, say so plainly — do not invent findings." > "$REPO/.dev-loop/plan-review.ndjson" 2>"$REPO/.dev-loop/plan-review.err"
+If the plan is sound, say so plainly — do not invent findings." < /dev/null > "$REPO/.dev-loop/plan-review.ndjson" 2>"$REPO/.dev-loop/plan-review.err"
 jq -r 'select(.type=="text") | .part.text' "$REPO/.dev-loop/plan-review.ndjson" > "$REPO/.dev-loop/plan-review.md"
 ```
 
@@ -259,11 +261,12 @@ Then read `$REPO/.dev-loop/plan-review.md` — the extracted findings, ending wi
 concurrent loops on different projects; `.dev-loop/` is per-worktree and git-excluded.)
 Bridge rules are `/review-task` §4 Reviewer B's: model pinned `openai/gpt-5.5` at **default variant**
 (NEVER `--variant high` — it silent-reasons for 10min+ and never returns; see §4), `--format json` +
-the `jq` extraction (default output drops the message on redirect), FOREGROUND with the timeout
-(never background-and-poll), retry once **at the SAME 480s timeout — NEVER raise it** (a run that
+the `jq` extraction (default output drops the message on redirect), `< /dev/null` on every leg
+(opencode ≥ 1.17.15 and codex both hang forever reading inherited stdin on a non-TTY), the
+liveness shape (background + 60s zero-byte kill + `wait` — §4; applies to attempt 1, not just the
+retry), retry once **at the SAME 480s timeout — NEVER raise it** (a run that
 hits 480s is a real stall, not slow reasoning; raising to 900 just burns 15 more minutes — this
-exact escalation happened 2026-07-06), then the codex fallback chain (with `< /dev/null` — codex
-hangs reading stdin on a non-TTY). If both opencode attempts time out, before falling back check
+exact escalation happened 2026-07-06), then the codex fallback chain. If both opencode attempts time out, before falling back check
 `plan-review.err` + the partial `plan-review.ndjson`: tool-call lines mean the audit was
 legitimately still reading (report that — it's a budget problem, not a stall), zero output means
 a wedged run. Apply §4's liveness rule: a run whose output file is still 0 bytes at 60s is a

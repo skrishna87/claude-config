@@ -64,7 +64,8 @@ the model (`gpt-5.5`, default variant, every leg):
    gpt-5.5, so the leg is absent there by construction — never substitute a lesser copilot model.
 3. `codex exec` — final fallback. Same ChatGPT quota as leg 1 but a different harness, which is
    the point: the observed wedge modes (2026-07-05 `--variant high`; 2026-07-06 concurrent
-   cold-start stall) were opencode-side, and only a harness change escapes those.
+   cold-start stall; 2026-07-07 stdin-EOF block) were opencode-side, and only a harness change
+   escapes those.
 
 Leg 2 liveness is machine-resolved locally, no env files: `opencode models | grep -qx
 'github-copilot/gpt-5.5'` (models list only shows authenticated providers). Wiring it is a one-time
@@ -79,8 +80,10 @@ retired from the chain; `bootstrap-chatmock.sh` stays in the repo for reference 
 `~/.claude/bridge-copilot.env` anymore.
 
 **Preflight (mandatory before any gate work starts):** `/dev-loop` §1 and `/plan-feature` stage 5
-run one **serialized** probe — `timeout 60 opencode run -m openai/gpt-5.5 --format json "reply OK"`
-— before any fan-out. It absorbs the morning OAuth refresh, proves auth+model resolve, and writes
+run one **serialized** probe — `timeout 60 opencode run --dir "$REPO" -m openai/gpt-5.5 --format
+json "reply OK" < /dev/null` — before any fan-out, **in the gate's own invocation shape** (`--dir`
++ `< /dev/null`): a probe that differs from the gates in stdin or working directory can pass while
+every gate wedges (2026-07-07). It absorbs the morning OAuth refresh, proves auth+model resolve, and writes
 the live-leg list to `$REPO/.dev-loop/bridge-ok` (one leg per line, in chain order) so per-task
 gates skip dead legs instead of rediscovering them mid-failure. Probe fails → probe leg 2 → a
 chain with no live opencode leg starts at codex and the run is flagged before any implementation
@@ -92,13 +95,25 @@ shared-state contention under `~/.local/share/opencode/` — retries in fresh pr
 while the sibling process was alive; serial runs worked). Multi-repo gate legs run **serially** —
 the cost is ~90s per extra repo and buys determinism.
 
-**Timeout law (unchanged, now with teeth):** 300s per-task / 480s plan-gate, foreground. On
+**stdin law: `< /dev/null` on every opencode invocation, same as codex.** opencode ≥ 1.17.15
+(upgraded 2026-07-07) blocks reading inherited stdin on a non-TTY — waits for EOF forever, writes
+0 bytes. Deterministic, not intermittent: the 2026-07-07 plan-gate wedged 4/4 (both legs + all
+retries) until stdin was redirected; A/B-confirmed in the same worktree (`< /dev/null` → OK in
+~10s; inherited stdin → 0 bytes at timeout). Harness upgrades change invocation behavior — after
+upgrading opencode or codex, re-run the preflight probe in gate shape before trusting the chain.
+
+**Timeout law (unchanged, now with teeth):** 300s per-task / 480s plan-gate, run in the liveness
+shape (`/review-task` §4: background the `timeout`-wrapped leg in one shell command, 60s zero-byte
+kill, `wait` for the exit code). On
 timeout, retry ONCE with the **verbatim same command** — same timeout; a run that "needs more
 time" is a stall. A second timeout means the leg is **dead**: fall to the next leg immediately.
 There is no third attempt and no larger timeout — raising it is how 8 designed minutes became
 23 real ones (480+900, 2026-07-06). Plus the **liveness rule**: 0 bytes of output at 60s = a
-wedged opencode init (the observed failure mode wedges between `init` and session-create and
-never writes anything; healthy runs emit events in ~5s) — kill at 60s, count the attempt.
+wedged opencode init (both observed wedge modes — the 2026-07-06 intermittent init-hang and the
+2026-07-07 stdin block — stall between `init` and session-create and
+never write anything; healthy runs emit events in ~5s) — kill at 60s, count the attempt, on
+EVERY attempt including the first (2026-07-07: attempt 1 burned its full 480s because the kill
+was applied only to the retry).
 
 **The machine boundary is still the only work/personal guard** — never run a personal repo through
 the work laptop's gate (leg 2 there rides the org seat); a personal machine's whole chain rides
