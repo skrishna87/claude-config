@@ -1,5 +1,5 @@
 ---
-description: Locked review gate — cross-model rubric review (Claude self + GPT via the opencode bridge) plus dedicated security and leanness passes, over a task's diff or a whole feature. The ONLY reviewer /dev-loop uses.
+description: Locked review gate — cross-model rubric review (Claude self + GPT via the copilot → opencode → codex bridge chain) plus dedicated security and leanness passes, over a task's diff or a whole feature. The ONLY reviewer /dev-loop uses.
 argument-hint: "[repo/worktree path] [--integration <base-ref> for a whole-feature review] [--re-review after a fix cycle, with the prior blocking findings]"
 ---
 
@@ -96,16 +96,23 @@ the verdict so the deferral is visible, never silent. This applies to the **per-
 at `--integration`, and for any `[L]` task, Reviewer B **always** runs. Not a leaf (or unsignaled)
 → run it as below.
 
-**Resolve the bridge chain first (once per gate):** read the `Bridge-mode:` line from
-`$REPO/.dev-loop/plan.md`'s header (stamped at plan kickoff — see § Bridge modes in
-`~/.claude/reference/model-policy.md`). `work` → **copilot → opencode → codex**; `personal` or no
-line → **opencode → codex** (a personal repo must never route through the company Copilot seat).
-Every leg pins `gpt-5.5`, so falling back changes transport, never the verdict's model. Record the
-leg that produced the verdict as `bridge: copilot|opencode|codex` alongside `coverage:`.
+**The bridge chain (every gate, every machine): copilot → opencode → codex.** No per-plan mode —
+the transport is machine-resolved (§ Bridge chain in `~/.claude/reference/model-policy.md`):
+`~/.claude/bridge-copilot.env` present = Copilot BYOK → the localhost codex-OAuth shim (personal
+machine, ChatGPT quota); absent = the machine's own Copilot seat. A `Bridge-mode:` line in an older
+plan is ignored. Every leg pins `gpt-5.5`, so falling back changes transport, never the verdict's
+model. Record the leg that produced the verdict as `bridge: copilot|opencode|codex` alongside
+`coverage:`.
 
-**Copilot leg (`work` primary):**
+**Copilot leg (primary):**
 
 ```bash
+# Machine-resolved transport: env file present = BYOK → localhost shim; absent = Copilot seat.
+if [ -f ~/.claude/bridge-copilot.env ]; then
+  . ~/.claude/bridge-copilot.env
+  curl -fsS "${COPILOT_PROVIDER_BASE_URL%/}/models" >/dev/null 2>&1 || \
+    { nohup ~/.local/bin/go-chatmock serve > ~/.chatgpt-local/serve.log 2>&1 & sleep 2; }
+fi
 cd "$REPO" && timeout 300 copilot -p "<the same review prompt as the opencode block below>" \
   --model gpt-5.5 --no-ask-user --deny-tool write \
   --output-format json < /dev/null > "$REPO/.dev-loop/cross-review.ndjson" 2>"$REPO/.dev-loop/cross-review.err"
@@ -116,11 +123,15 @@ jq -r 'select(.type=="assistant.message") | .data.content' "$REPO/.dev-loop/cros
   auto-deny-and-continue in `-p` mode (no prompt hang). `< /dev/null` — same stdin rule as codex.
 - Same output filename as the opencode leg on purpose: archiving and the miner stay uniform. The
   event schemas differ (copilot `assistant.message` vs opencode `text`) — use the leg's own jq.
-- Copilot streams reasoning events, so a long think shows liveness in the ndjson; the same
-  fail-fast applies — 300s (480s plan-gate), retry once at the SAME timeout, then next leg.
-  Smoke-verified 2026-07-06 (CLI 1.0.68, gpt-5.5 served, non-TTY clean).
+- Copilot streams events **to a file** — a long think shows liveness in the growing ndjson and the
+  partial-ndjson wedge check works. It buffers stdout to ONE end-dump on a pipe, so NEVER pipe the
+  output; always `> file` as shown. Same fail-fast — 300s (480s plan-gate), retry once at the SAME
+  timeout, then next leg. Seat leg smoke-verified 2026-07-06 (CLI 1.0.68, gpt-5.5 served, non-TTY
+  clean); shim leg eval'd same day — 3/3 planted defects, correct severities, both runs (40s/98s),
+  verdict parity with opencode, 0 premium requests. If the shim leg errors "requires a newer
+  version of Codex", the backend raised its client-version floor: rerun `bootstrap-chatmock.sh`.
 
-**opencode leg (`personal` primary / `work` first fallback):**
+**opencode leg (first fallback):**
 
 ```bash
 timeout 300 opencode run --dir "$REPO" -m openai/gpt-5.5 --agent plan --format json \
@@ -170,7 +181,7 @@ Then read `$REPO/.dev-loop/cross-review.md` — the concatenated review text, en
   silently and the poll never returns; this burned a real run). Check the exit code; on non-zero
   or timeout, retry once, then fall back. A healthy default-variant review is ~90s, so a run pinned
   at the 300s timeout is a real stall, not slow reasoning — retry, then fall back; don't raise it.
-- Codex leg (final fallback, both modes) — earlier legs exhausted → `codex exec -C "$REPO" -s read-only -o
+- Codex leg (final fallback) — earlier legs exhausted → `codex exec -C "$REPO" -s read-only -o
   "$REPO/.dev-loop/cross-review.md" "<same prompt>" < /dev/null` (the `< /dev/null` is mandatory:
   codex blocks reading stdin on a non-TTY and hangs forever without it — burned 2026-07-06).
   (Foreground + timeout, same rule; on hosts where codex's

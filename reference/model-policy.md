@@ -42,26 +42,39 @@ Untagged tasks (plans written before this policy) = `M`.
 | Implementer, `[S]`/`[M]` task | **budget** | Claude Code: spawn implementer subagent with `model: sonnet` · opencode: `task-implementer-lite` |
 | Implementer, `[L]` task | session model | Claude Code: omit `model` (inherit) · opencode: `task-implementer` |
 | Fix cycles | per rule 4 | escalate on `design`/`semantics` cause |
-| Gate reviewers (both halves) | **strong — never below session** | Claude Code: inherit + GPT via the bridge chain (`openai/gpt-5.5`, pinned, **default variant — never `--variant high`**; transport per § Bridge modes) · opencode: `task-reviewer` (inherits) + `task-reviewer-cross` (pinned) |
+| Gate reviewers (both halves) | **strong — never below session** | Claude Code: inherit + GPT via the bridge chain (`openai/gpt-5.5`, pinned, **default variant — never `--variant high`**; transport per § Bridge chain) · opencode: `task-reviewer` (inherits) + `task-reviewer-cross` (pinned) |
 | Plan-gate, security, integration | strongest available | root-of-trust and whole-surface passes |
 
-## Bridge modes — which transport carries the pinned gate model
+## Bridge chain — which transport carries the pinned gate model
 
-The reviewer MODEL never varies (`gpt-5.5`, default variant, all legs); a mode only picks which
-harness carries it and the fallback order, so a fallback changes transport, never the verdict's
-model. Locked once per feature: `/plan-feature` asks at kickoff and stamps `Bridge-mode:` into
-plan.md's header; every gate (plan-gate, per-task, integration) reads it from the plan mirror.
+One chain on every machine: **Copilot CLI → opencode → codex**. The reviewer MODEL never varies
+(`gpt-5.5`, default variant, every leg); a fallback changes transport, never the verdict's model.
+Work/personal separation is **machine-level, not per-plan**: each machine's Copilot backend decides
+whose credits the primary leg burns, so plans carry no mode stamp and nobody asks at kickoff.
 
-| mode | chain | when |
+| machine | copilot backend | why safe |
 |---|---|---|
-| `work` | **Copilot CLI → opencode → codex** | company repos. Copilot: org AI credits (token-metered, admin-visible — fine for work), streams reasoning so a long think shows liveness, native read-only posture. |
-| `personal` | **opencode → codex** (Copilot NEVER in the chain) | personal repos. The company seat must not carry personal work — org credits + admin-visible usage. |
+| work laptop | org seat (GitHub org login; gpt-5.5 confirmed served 2026-07-06) | org AI credits, admin-visible — carries work only |
+| personal | BYOK → localhost chatmock shim carrying the codex ChatGPT OAuth (`~/.codex/auth.json`) | personal ChatGPT quota; no work login exists on the machine, so the org seat is untouchable |
 
-Unmarked plan (pre-mode) = `personal` — today's behavior, and it fails safe: a missing header can
-under-use the work seat but can never leak a personal project onto it. `gpt-5.5` on the Copilot
-seat confirmed 2026-07-06 (smoke test, CLI 1.0.68, non-TTY clean). All legs share the same
-fail-fast timeouts, retry-at-SAME-timeout rule, and archive-the-stream telemetry; every verdict
-records which leg ran (`bridge: copilot|opencode|codex`).
+Personal-machine mechanics: `bootstrap-chatmock.sh` installs the shim (go-chatmock with its
+`CodexClientVersion` pinned to the installed codex CLI — the ChatGPT backend **version-gates
+gpt-5.5** and rejects stale client versions; rerun the bootstrap if "requires a newer version of
+Codex" reappears) and writes `~/.claude/bridge-copilot.env` (machine-local, NEVER synced) holding
+the `COPILOT_PROVIDER_*`/`COPILOT_MODEL` exports. The gate leg sources that env file when present
+and auto-starts the shim — file absent = seat machine — and the command shape is identical either
+way (`--model gpt-5.5` works under both backends). Eval 2026-07-06 (planted-defect diff, 2 runs +
+opencode baseline): copilot+shim caught 3/3 defects with correct severities both runs (40s, 98s),
+opencode 3/3 (30s) — full verdict parity, 0 GitHub premium requests through the shim. Streaming
+liveness holds with a `> file` redirect (so the partial-ndjson wedge diagnosis stays valid), but
+copilot buffers stdout to one end-dump on a PIPE — always redirect to a file.
+
+**The machine boundary is the only work/personal guard now** — never run a personal repo through
+the work laptop's gate (it would ride the org seat); everything on a personal machine rides your
+own quota by construction. Plans stamped `Bridge-mode:` by the 2026-07-06 interim design: the
+stamp is ignored — the chain is machine-resolved. All legs share the same fail-fast timeouts,
+retry-at-SAME-timeout rule, and archive-the-stream telemetry; every verdict records which leg ran
+(`bridge: copilot|opencode|codex`).
 
 ## Cross-model gate timing — per-task vs batched (leaf deferral)
 

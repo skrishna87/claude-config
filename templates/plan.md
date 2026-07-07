@@ -1,7 +1,7 @@
 # <Feature> — Plan
 
 > Source of truth for WHAT we're building and the locked decisions. Created once; rarely changes.
-> Source branch: <source>   |   Worktree: <.worktrees/<repo>/<branch>>   |   Bridge-mode: <work|personal>
+> Source branch: <source>   |   Worktree: <.worktrees/<repo>/<branch>>
 
 ## Context / goal
 <1–3 lines: the change and why>
