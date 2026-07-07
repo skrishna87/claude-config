@@ -91,7 +91,11 @@ done and gated either way — delegation is an optimization, not a requirement. 
      every gate run, preserve the cross-model output per task+cycle:
      `mkdir -p "<worktree>/.dev-loop/reviews"` then
      `cp "<worktree>/.dev-loop/cross-review.md" "<worktree>/.dev-loop/reviews/task<n>.cycle<k>.cross.md"`
-     (`<k>` = fix-cycle index, 0 for the first pass). These per-task/per-cycle review files — plus your
+     and `cp "<worktree>/.dev-loop/cross-review.ndjson" "<worktree>/.dev-loop/reviews/task<n>.cycle<k>.cross.ndjson"`
+     (`<k>` = fix-cycle index, 0 for the first pass; skip the ndjson copy if the run fell back to
+     codex, which produces none). The `.md` is the verdict; the `.ndjson` is the reviewer's
+     tool-call log — the only record of *what it read* to reach that verdict (exploration-footprint
+     telemetry). These per-task/per-cycle review files — plus your
      ORCHESTRATOR RESULT block, which you also write to `reviews/task<n>.result.md` in step 7 — are
      **durable structured run telemetry**: the miner/live-logger reads them at run-end (before the §4
      post-FF cleanup ask) as a clean source, instead of scraping the fragile prose in the transcript.

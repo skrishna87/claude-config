@@ -96,6 +96,32 @@ the verdict so the deferral is visible, never silent. This applies to the **per-
 at `--integration`, and for any `[L]` task, Reviewer B **always** runs. Not a leaf (or unsignaled)
 → run it as below.
 
+**Resolve the bridge chain first (once per gate):** read the `Bridge-mode:` line from
+`$REPO/.dev-loop/plan.md`'s header (stamped at plan kickoff — see § Bridge modes in
+`~/.claude/reference/model-policy.md`). `work` → **copilot → opencode → codex**; `personal` or no
+line → **opencode → codex** (a personal repo must never route through the company Copilot seat).
+Every leg pins `gpt-5.5`, so falling back changes transport, never the verdict's model. Record the
+leg that produced the verdict as `bridge: copilot|opencode|codex` alongside `coverage:`.
+
+**Copilot leg (`work` primary):**
+
+```bash
+cd "$REPO" && timeout 300 copilot -p "<the same review prompt as the opencode block below>" \
+  --model gpt-5.5 --no-ask-user --deny-tool write \
+  --output-format json < /dev/null > "$REPO/.dev-loop/cross-review.ndjson" 2>"$REPO/.dev-loop/cross-review.err"
+jq -r 'select(.type=="assistant.message") | .data.content' "$REPO/.dev-loop/cross-review.ndjson" > "$REPO/.dev-loop/cross-review.md"
+```
+- No `--dir` flag exists — the leading `cd "$REPO"` is the trust/context boundary. Read-only shell
+  (git diff/log, cat, grep) is auto-approved; `--deny-tool write` closes edits; denied tools
+  auto-deny-and-continue in `-p` mode (no prompt hang). `< /dev/null` — same stdin rule as codex.
+- Same output filename as the opencode leg on purpose: archiving and the miner stay uniform. The
+  event schemas differ (copilot `assistant.message` vs opencode `text`) — use the leg's own jq.
+- Copilot streams reasoning events, so a long think shows liveness in the ndjson; the same
+  fail-fast applies — 300s (480s plan-gate), retry once at the SAME timeout, then next leg.
+  Smoke-verified 2026-07-06 (CLI 1.0.68, gpt-5.5 served, non-TTY clean).
+
+**opencode leg (`personal` primary / `work` first fallback):**
+
 ```bash
 timeout 300 opencode run --dir "$REPO" -m openai/gpt-5.5 --agent plan --format json \
   "You are doing a READ-ONLY, STATIC review — do not modify any files, and do not read any file
@@ -117,8 +143,9 @@ Then read `$REPO/.dev-loop/cross-review.md` — the concatenated review text, en
   path — two loops on different projects (or two parallel lanes) would clobber each other's review and
   one gate could adjudicate another's findings against the wrong diff (a silent wrong PASS). `.dev-loop/`
   is per-worktree (the loop's isolation boundary) and git-excluded, so every concurrent gate is isolated.
-  The caller archives each result per fixed-point (`reviews/task<n>.cycle<k>.cross.md`) so it accumulates
-  as run telemetry the miner/logger ingests — see the orchestrator's gate step.
+  The caller archives each result per fixed-point (`reviews/task<n>.cycle<k>.cross.md` **and** the
+  raw `….cross.ndjson` — the ndjson holds the reviewer's tool-call log, the only record of what it
+  read) so it accumulates as run telemetry the miner/logger ingests — see the orchestrator's gate step.
 - **`--format json` is mandatory, not optional.** opencode's *default* formatted output renders the
   final assistant message in a TUI live-region that is DROPPED when stdout is redirected to a file —
   so `> file 2>&1` captures the streamed tool-call log but not the findings/verdict, and the gate
@@ -143,8 +170,10 @@ Then read `$REPO/.dev-loop/cross-review.md` — the concatenated review text, en
   silently and the poll never returns; this burned a real run). Check the exit code; on non-zero
   or timeout, retry once, then fall back. A healthy default-variant review is ~90s, so a run pinned
   at the 300s timeout is a real stall, not slow reasoning — retry, then fall back; don't raise it.
-- Fallback chain: opencode unavailable/unauthed → `codex exec -C "$REPO" -s read-only -o
-  "$REPO/.dev-loop/cross-review.md" "<same prompt>"` (foreground + timeout, same rule; on hosts where codex's
+- Codex leg (final fallback, both modes) — earlier legs exhausted → `codex exec -C "$REPO" -s read-only -o
+  "$REPO/.dev-loop/cross-review.md" "<same prompt>" < /dev/null` (the `< /dev/null` is mandatory:
+  codex blocks reading stdin on a non-TTY and hangs forever without it — burned 2026-07-06).
+  (Foreground + timeout, same rule; on hosts where codex's
   bwrap sandbox is blocked by apparmor userns restrictions, `-s danger-full-access` plus the
   READ-ONLY preamble is the user-authorized workaround; if codex errors on git, retry once with
   `--skip-git-repo-check`). If neither bridge works, proceed with Reviewer A alone but

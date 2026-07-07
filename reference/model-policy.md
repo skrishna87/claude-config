@@ -42,8 +42,26 @@ Untagged tasks (plans written before this policy) = `M`.
 | Implementer, `[S]`/`[M]` task | **budget** | Claude Code: spawn implementer subagent with `model: sonnet` · opencode: `task-implementer-lite` |
 | Implementer, `[L]` task | session model | Claude Code: omit `model` (inherit) · opencode: `task-implementer` |
 | Fix cycles | per rule 4 | escalate on `design`/`semantics` cause |
-| Gate reviewers (both halves) | **strong — never below session** | Claude Code: inherit + GPT via opencode bridge (`openai/gpt-5.5`, pinned, **default variant — never `--variant high`**) · opencode: `task-reviewer` (inherits) + `task-reviewer-cross` (pinned) |
+| Gate reviewers (both halves) | **strong — never below session** | Claude Code: inherit + GPT via the bridge chain (`openai/gpt-5.5`, pinned, **default variant — never `--variant high`**; transport per § Bridge modes) · opencode: `task-reviewer` (inherits) + `task-reviewer-cross` (pinned) |
 | Plan-gate, security, integration | strongest available | root-of-trust and whole-surface passes |
+
+## Bridge modes — which transport carries the pinned gate model
+
+The reviewer MODEL never varies (`gpt-5.5`, default variant, all legs); a mode only picks which
+harness carries it and the fallback order, so a fallback changes transport, never the verdict's
+model. Locked once per feature: `/plan-feature` asks at kickoff and stamps `Bridge-mode:` into
+plan.md's header; every gate (plan-gate, per-task, integration) reads it from the plan mirror.
+
+| mode | chain | when |
+|---|---|---|
+| `work` | **Copilot CLI → opencode → codex** | company repos. Copilot: org AI credits (token-metered, admin-visible — fine for work), streams reasoning so a long think shows liveness, native read-only posture. |
+| `personal` | **opencode → codex** (Copilot NEVER in the chain) | personal repos. The company seat must not carry personal work — org credits + admin-visible usage. |
+
+Unmarked plan (pre-mode) = `personal` — today's behavior, and it fails safe: a missing header can
+under-use the work seat but can never leak a personal project onto it. `gpt-5.5` on the Copilot
+seat confirmed 2026-07-06 (smoke test, CLI 1.0.68, non-TTY clean). All legs share the same
+fail-fast timeouts, retry-at-SAME-timeout rule, and archive-the-stream telemetry; every verdict
+records which leg ran (`bridge: copilot|opencode|codex`).
 
 ## Cross-model gate timing — per-task vs batched (leaf deferral)
 

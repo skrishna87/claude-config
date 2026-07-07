@@ -29,6 +29,20 @@ it. Never silently bypass stages — downgrade explicitly at the start, or not a
 
 ---
 
+## Bridge mode — pick the gate transport, once
+
+Alongside sizing, lock which bridge chain every cross-model gate in this loop will use
+(§ Bridge modes in `~/.claude/reference/model-policy.md`): **work** = Copilot CLI primary
+(company seat — work repos only) or **personal** = opencode primary (Copilot never in the
+chain — org credits must not carry personal projects). If the repo's memory or CLAUDE.md
+already records a default, confirm it silently; otherwise ask the user (one question, two
+options) and offer to save the answer as the repo default so future plans skip the ask. The
+choice is stamped into plan.md's header at Stage 3 (`Bridge-mode:`) and is LOCKED for the
+loop — Stage 5 here and every `/dev-loop` gate read it from the plan mirror; nobody re-asks
+or flips it mid-run. Same model every leg (`gpt-5.5`) — the mode only picks the transport.
+
+---
+
 ## Stage 1 — Align (grill)
 
 Interview the user relentlessly about this feature until you reach a shared understanding.
@@ -102,6 +116,8 @@ new interview — just write down what you already know. Fill:
 - **Locked decisions** — the architecture/library/pattern calls a fresh session must NOT
   re-litigate, each with its why. (These came out of Stage 1.)
 - **Seam map** — the grounded seams, pinned symbols, write-set, and twins from Stage 2.
+- **Bridge-mode** — `work` or `personal` from the kickoff ask, on the header line — the gates
+  read it mechanically from the plan mirror.
 - Use the repo's own vocabulary throughout. Respect existing conventions and any ADRs/CONTEXT
   in the area. No file-path-level code snippets unless a shape (schema, state machine, enum)
   encodes a decision more precisely than prose.
@@ -205,7 +221,10 @@ grep -qxF '.dev-loop/' "$EXCL" 2>/dev/null || echo '.dev-loop/' >> "$EXCL"
 cp "<abs>/docs/<feature>/plan.md" "$REPO/.dev-loop/plan.md"
 ```
 
-Then:
+Then run the audit through the chain for the plan's `Bridge-mode` (locked at kickoff). `work` →
+Copilot CLI first: `/review-task` §4's copilot leg shape with THIS audit prompt, `timeout 480`,
+output to `plan-review.ndjson` + its `assistant.message` jq; on failure fall through to the
+opencode block below. `personal` → straight to opencode:
 
 ```bash
 timeout 480 opencode run --dir "$REPO" -m openai/gpt-5.5 --agent plan --format json \
@@ -250,7 +269,13 @@ concurrent loops on different projects; `.dev-loop/` is per-worktree and git-exc
 Bridge rules are `/review-task` §4 Reviewer B's: model pinned `openai/gpt-5.5` at **default variant**
 (NEVER `--variant high` — it silent-reasons for 10min+ and never returns; see §4), `--format json` +
 the `jq` extraction (default output drops the message on redirect), FOREGROUND with the timeout
-(never background-and-poll), retry once on failure, then the codex fallback chain.
+(never background-and-poll), retry once **at the SAME 480s timeout — NEVER raise it** (a run that
+hits 480s is a real stall, not slow reasoning; raising to 900 just burns 15 more minutes — this
+exact escalation happened 2026-07-06), then the codex fallback chain (with `< /dev/null` — codex
+hangs reading stdin on a non-TTY). If both opencode attempts time out, before falling back check
+`plan-review.err` + the partial `plan-review.ndjson`: tool-call lines mean the audit was
+legitimately still reading (report that — it's a budget problem, not a stall), zero output means
+a wedged run.
 
 Then **adjudicate**: verify each finding against the code yourself before acting — the auditor
 can be wrong too (the `/review-task` §5 disagreement discipline applies). Fix the plan for every
