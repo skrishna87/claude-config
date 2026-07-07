@@ -206,10 +206,16 @@ cp "<abs>/docs/<feature>/plan.md" "$REPO/.dev-loop/plan.md"
 ```
 
 Then run the audit through the bridge chain (§ Bridge chain in
-`~/.claude/reference/model-policy.md` — machine-resolved, no plan stamp). Copilot CLI first:
-`/review-task` §4's copilot leg shape (including its env-file/shim preamble) with THIS audit
-prompt, `timeout 480`, output to `plan-review.ndjson` + its `assistant.message` jq; on failure
-fall through to the opencode block below:
+`~/.claude/reference/model-policy.md`). **Preflight first, before any audit runs**: one serialized
+`timeout 60 opencode run -m openai/gpt-5.5 --format json "reply OK"` — it absorbs the cold-start
+OAuth refresh and proves auth+model resolve. Write the live legs to `$REPO/.dev-loop/bridge-ok`,
+one per line in chain order (`openai/gpt-5.5` if the probe answered; `github-copilot/gpt-5.5` iff
+`opencode models | grep -qx 'github-copilot/gpt-5.5'`). **Multi-repo plan → run the per-repo
+audits SERIALLY — never two headless opencode runs at once on a machine** (concurrent instances
+wedge each other on shared local state; the 2026-07-06 ui/api incident). The primary leg is the
+opencode block below; when it dies (one verbatim retry at the SAME 480s, second timeout = leg
+dead), switch ONLY the provider — same command with `-m github-copilot/gpt-5.5` — where that leg
+is live, then codex per `/review-task` §4's final-fallback shape:
 
 ```bash
 timeout 480 opencode run --dir "$REPO" -m openai/gpt-5.5 --agent plan --format json \
@@ -260,7 +266,9 @@ exact escalation happened 2026-07-06), then the codex fallback chain (with `< /d
 hangs reading stdin on a non-TTY). If both opencode attempts time out, before falling back check
 `plan-review.err` + the partial `plan-review.ndjson`: tool-call lines mean the audit was
 legitimately still reading (report that — it's a budget problem, not a stall), zero output means
-a wedged run.
+a wedged run. Apply §4's liveness rule: a run whose output file is still 0 bytes at 60s is a
+wedged init (every observed 2026-07-06 wedge wrote nothing, ever; healthy runs emit events in
+~5s) — kill it then, count the attempt, move on.
 
 Then **adjudicate**: verify each finding against the code yourself before acting — the auditor
 can be wrong too (the `/review-task` §5 disagreement discipline applies). Fix the plan for every

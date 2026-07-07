@@ -74,9 +74,12 @@ done and gated either way — delegation is an optimization, not a requirement. 
 
 4. **Review gate** (locked — delegate or inline). Run the gate per `reviewGatePath`
    (`~/.claude/commands/review-task.md`) against the unstaged diff (`git -C "<worktree>" diff`):
-   Claude rubric review + **GPT** cross-model (the bridge chain — copilot → opencode → codex,
-   pinned `openai/gpt-5.5` at default variant — never `--variant high`; FOREGROUND with a timeout,
-   never background-and-poll) + the leanness pass, consolidated to a verdict.
+   Claude rubric review + **GPT** cross-model (the bridge chain — opencode with provider-switch
+   retries `openai/gpt-5.5` → `github-copilot/gpt-5.5`, then codex; pinned model at default
+   variant — never `--variant high`; FOREGROUND with a timeout, retry once verbatim, second
+   timeout = leg dead, never a larger timeout; never background-and-poll; never run concurrently
+   with another opencode gate) + the leanness pass, consolidated to a verdict. The driver's
+   preflight wrote the live legs to `<worktree>/.dev-loop/bridge-ok` — honor it.
    Do **not** substitute any other reviewer. If no leg of the bridge chain is available, proceed
    single-model and mark
    `coverage: DEGRADED` (never silently drop it).

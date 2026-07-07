@@ -1,5 +1,5 @@
 ---
-description: Locked review gate — cross-model rubric review (Claude self + GPT via the copilot → opencode → codex bridge chain) plus dedicated security and leanness passes, over a task's diff or a whole feature. The ONLY reviewer /dev-loop uses.
+description: Locked review gate — cross-model rubric review (Claude self + GPT via the opencode bridge, provider-switch retries openai → github-copilot, codex final fallback) plus dedicated security and leanness passes, over a task's diff or a whole feature. The ONLY reviewer /dev-loop uses.
 argument-hint: "[repo/worktree path] [--integration <base-ref> for a whole-feature review] [--re-review after a fix cycle, with the prior blocking findings]"
 ---
 
@@ -96,42 +96,40 @@ the verdict so the deferral is visible, never silent. This applies to the **per-
 at `--integration`, and for any `[L]` task, Reviewer B **always** runs. Not a leaf (or unsignaled)
 → run it as below.
 
-**The bridge chain (every gate, every machine): copilot → opencode → codex.** No per-plan mode —
-the transport is machine-resolved (§ Bridge chain in `~/.claude/reference/model-policy.md`):
-`~/.claude/bridge-copilot.env` present = Copilot BYOK → the localhost codex-OAuth shim (personal
-machine, ChatGPT quota); absent = the machine's own Copilot seat. A `Bridge-mode:` line in an older
-plan is ignored. Every leg pins `gpt-5.5`, so falling back changes transport, never the verdict's
-model. Record the leg that produced the verdict as `bridge: copilot|opencode|codex` alongside
-`coverage:`.
+**The bridge chain (every gate, every machine): opencode(openai) → opencode(github-copilot) →
+codex.** One harness — opencode; a retry switches the PROVIDER inside it, never the harness and
+never the model (§ Bridge chain in `~/.claude/reference/model-policy.md`). Every leg pins
+`gpt-5.5`, so falling back changes whose OAuth carries the request, never the verdict's model.
+Record the leg that produced the verdict as `bridge: opencode-openai|opencode-copilot|codex`
+alongside `coverage:`.
 
-**Copilot leg (primary):**
+**Leg liveness — read the preflight marker first.** The driver's preflight (dev-loop §1 /
+plan-feature stage 5) writes `$REPO/.dev-loop/bridge-ok` — the live legs, one per line, in chain
+order. Present → run only the listed legs (the others were probed dead at run start; don't
+rediscover mid-gate). Absent (standalone invocation) → probe for yourself before the first gate:
+`timeout 60 opencode run -m openai/gpt-5.5 --format json "reply OK"`; leg 2 exists only if
+`opencode models | grep -qx 'github-copilot/gpt-5.5'` (personal Copilot seats don't serve gpt-5.5 —
+that leg is org-seat-machines-only; NEVER substitute a lesser copilot model).
 
-```bash
-# Machine-resolved transport: env file present = BYOK → localhost shim; absent = Copilot seat.
-if [ -f ~/.claude/bridge-copilot.env ]; then
-  . ~/.claude/bridge-copilot.env
-  curl -fsS "${COPILOT_PROVIDER_BASE_URL%/}/models" >/dev/null 2>&1 || \
-    { nohup ~/.local/bin/go-chatmock serve > ~/.chatgpt-local/serve.log 2>&1 & sleep 2; }
-fi
-cd "$REPO" && timeout 300 copilot -p "<the same review prompt as the opencode block below>" \
-  --model gpt-5.5 --no-ask-user --deny-tool write \
-  --output-format json < /dev/null > "$REPO/.dev-loop/cross-review.ndjson" 2>"$REPO/.dev-loop/cross-review.err"
-jq -r 'select(.type=="assistant.message") | .data.content' "$REPO/.dev-loop/cross-review.ndjson" > "$REPO/.dev-loop/cross-review.md"
-```
-- No `--dir` flag exists — the leading `cd "$REPO"` is the trust/context boundary. Read-only shell
-  (git diff/log, cat, grep) is auto-approved; `--deny-tool write` closes edits; denied tools
-  auto-deny-and-continue in `-p` mode (no prompt hang). `< /dev/null` — same stdin rule as codex.
-- Same output filename as the opencode leg on purpose: archiving and the miner stay uniform. The
-  event schemas differ (copilot `assistant.message` vs opencode `text`) — use the leg's own jq.
-- Copilot streams events **to a file** — a long think shows liveness in the growing ndjson and the
-  partial-ndjson wedge check works. It buffers stdout to ONE end-dump on a pipe, so NEVER pipe the
-  output; always `> file` as shown. Same fail-fast — 300s (480s plan-gate), retry once at the SAME
-  timeout, then next leg. Seat leg smoke-verified 2026-07-06 (CLI 1.0.68, gpt-5.5 served, non-TTY
-  clean); shim leg eval'd same day — 3/3 planted defects, correct severities, both runs (40s/98s),
-  verdict parity with opencode, 0 premium requests. If the shim leg errors "requires a newer
-  version of Codex", the backend raised its client-version floor: rerun `bootstrap-chatmock.sh`.
+**Concurrency + retry laws (bind every leg):**
+- **Never run two headless opencode gates concurrently on one machine** — concurrent instances can
+  wedge each other via shared state under `~/.local/share/opencode/` (2026-07-06 incident: two
+  parallel stage-5 gates both stalled; retries in fresh processes hung too while the sibling
+  process lived; serial runs worked). Multi-repo / multi-lane gates run serially.
+- **Liveness rule — a zero-byte run is dead at 60s, don't wait out the timeout.** A healthy
+  `--format json` run writes its first event lines within ~5s; every observed init-wedge
+  (2026-07-06, both machines) produced ZERO bytes forever. So run the leg in the background of its
+  own shell command, poll the output file, and kill at 60s if it is still 0 bytes — that's the
+  attempt, proceed per the retry law. Output growing → leave it alone until the real timeout (a
+  long reviewer think is not a wedge; the ndjson tool-call lines show it reading).
+- On timeout or non-zero exit: retry ONCE with the **verbatim same command** — same timeout, but
+  redirect the retry to `cross-review.retry.ndjson` (a DISTINCT file: the retry must leave
+  physical evidence it ran — a 2026-07-06 demo run reported a retry that file mtimes disprove). A
+  second timeout = the leg is **dead** → move to the next leg immediately. There is no third
+  attempt and NEVER a larger timeout (raising 480→900 "to give it room" is how 8 designed minutes
+  became 23 real ones, 2026-07-06).
 
-**opencode leg (first fallback):**
+**opencode openai leg (primary):**
 
 ```bash
 timeout 300 opencode run --dir "$REPO" -m openai/gpt-5.5 --agent plan --format json \
@@ -181,13 +179,21 @@ Then read `$REPO/.dev-loop/cross-review.md` — the concatenated review text, en
   silently and the poll never returns; this burned a real run). Check the exit code; on non-zero
   or timeout, retry once, then fall back. A healthy default-variant review is ~90s, so a run pinned
   at the 300s timeout is a real stall, not slow reasoning — retry, then fall back; don't raise it.
-- Codex leg (final fallback) — earlier legs exhausted → `codex exec -C "$REPO" -s read-only -o
+**opencode github-copilot leg (provider-switch retry):** primary leg dead AND
+`github-copilot/gpt-5.5` in the `bridge-ok` marker (or in `opencode models`) → the **identical
+command with only the model flag changed**: `-m github-copilot/gpt-5.5`. Same prompt, same
+timeout, same jq, same retry law. This rides the machine's Copilot seat (work laptop = org
+seat/credits — one more reason personal repos never gate on the work laptop). Leg not live on this
+machine → skip straight to codex; do not attempt it "just in case" with a different copilot model.
+
+**codex leg (final fallback)** — both opencode legs exhausted (this is also the escape hatch for
+opencode-harness wedges, which both observed hang modes were) → `codex exec -C "$REPO" -s read-only -o
   "$REPO/.dev-loop/cross-review.md" "<same prompt>" < /dev/null` (the `< /dev/null` is mandatory:
   codex blocks reading stdin on a non-TTY and hangs forever without it — burned 2026-07-06).
   (Foreground + timeout, same rule; on hosts where codex's
   bwrap sandbox is blocked by apparmor userns restrictions, `-s danger-full-access` plus the
   READ-ONLY preamble is the user-authorized workaround; if codex errors on git, retry once with
-  `--skip-git-repo-check`). If neither bridge works, proceed with Reviewer A alone but
+  `--skip-git-repo-check`). If no leg works, proceed with Reviewer A alone but
   **explicitly flag that coverage was single-model** — never silently drop the cross-model
   reviewer.
 

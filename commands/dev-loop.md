@@ -50,6 +50,17 @@ source. Resuming → reuse the recorded worktree/branch. Creating → `git -C <s
 <remote> <branch>` when the sub-repo has a remote (record `Published: <remote>/<branch>` in
 progress.md; no remote → record `Published: no` and continue — orchestrators then skip pushing).
 
+**Bridge preflight (once per run, before the first orchestrator spawns):** one serialized
+`timeout 60 opencode run -m openai/gpt-5.5 --format json "reply OK"` — absorbs the cold-start
+OAuth refresh and proves the gate's primary leg resolves before any implementation work is spent.
+Write the live legs to `<worktree>/.dev-loop/bridge-ok`, one per line in chain order
+(`openai/gpt-5.5` if the probe answered; `github-copilot/gpt-5.5` iff `opencode models | grep -qx
+'github-copilot/gpt-5.5'`; neither → leave the file empty so gates start at codex and flag it).
+Per-task gates read this marker instead of rediscovering dead legs mid-failure (`/review-task` §4).
+Multi-lane runs: ONE preflight, then remember the concurrency law — gate legs are headless opencode
+runs and **two must never execute at once on a machine**, so lanes serialize their gate steps even
+when their implement steps overlap (see § Bridge chain in `policyPath`).
+
 ## 2. Gather the brief (once)
 From `plan.md`, extract the **`## Seam map`** text and **`## Locked decisions`** text. Note the
 absolute `worktree`, `planPath` (`docs/<feature>/plan.md`), `progressPath`, `baseSha`, `source`, and

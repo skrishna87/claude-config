@@ -22,8 +22,9 @@ budget implementer safe to try; savings come from generation, never from verific
 
 ## Task tiers (assigned at plan time, /plan-feature Stage 4)
 
-The slicer tags every task `[S]`, `[M]`, or `[L]` — classification happens once, by the
-strongest model in the pipeline, not per-run:
+The slicer tags every task `[S]`, `[M]`, or `[L]` — classification happens once, at plan time,
+by the session model running `/plan-feature` (launch planning on your strongest plan-included
+model), not per-run:
 
 - **S** — mechanical, fully specified by the plan: rename/move, config, boilerplate, a test
   for pinned behavior, a template CRUD path. No design judgment left.
@@ -43,38 +44,65 @@ Untagged tasks (plans written before this policy) = `M`.
 | Implementer, `[L]` task | session model | Claude Code: omit `model` (inherit) · opencode: `task-implementer` |
 | Fix cycles | per rule 4 | escalate on `design`/`semantics` cause |
 | Gate reviewers (both halves) | **strong — never below session** | Claude Code: inherit + GPT via the bridge chain (`openai/gpt-5.5`, pinned, **default variant — never `--variant high`**; transport per § Bridge chain) · opencode: `task-reviewer` (inherits) + `task-reviewer-cross` (pinned) |
-| Plan-gate, security, integration | strongest available | root-of-trust and whole-surface passes |
+| Plan-gate, security, integration | session model (the ceiling) | root-of-trust and whole-surface passes — run at the session model by inheriting, NEVER by passing an explicit stronger `model:` |
+
+**Ceiling rule (2026-07-07):** the session model is the MAX tier everywhere. "Strong" always means
+*inherit* (omit `model:`), never an explicit upgrade — in particular, never spawn `model: fable`:
+Fable is API/extra-usage only (dropped from plan inclusion 2026-07-07), so an explicit fable spawn
+silently bills outside the plan. Want a stronger pipeline → launch the session on the stronger
+model; the tiers follow it by construction.
 
 ## Bridge chain — which transport carries the pinned gate model
 
-One chain on every machine: **Copilot CLI → opencode → codex**. The reviewer MODEL never varies
-(`gpt-5.5`, default variant, every leg); a fallback changes transport, never the verdict's model.
-Work/personal separation is **machine-level, not per-plan**: each machine's Copilot backend decides
-whose credits the primary leg burns, so plans carry no mode stamp and nobody asks at kickoff.
+**One harness on every machine: opencode.** The legs of the chain are *providers inside it*, not
+different CLIs — a retry switches whose OAuth carries the request, never the harness, and never
+the model (`gpt-5.5`, default variant, every leg):
 
-| machine | copilot backend | why safe |
-|---|---|---|
-| work laptop | org seat (GitHub org login; gpt-5.5 confirmed served 2026-07-06) | org AI credits, admin-visible — carries work only |
-| personal | BYOK → localhost chatmock shim carrying the codex ChatGPT OAuth (`~/.codex/auth.json`) | personal ChatGPT quota; no work login exists on the machine, so the org seat is untouchable |
+1. `opencode run -m openai/gpt-5.5` — primary (ChatGPT-plan OAuth; opencode's own openai login).
+2. `opencode run -m github-copilot/gpt-5.5` — provider-switch retry, **only where the machine's
+   Copilot login serves gpt-5.5**. Work laptop (org seat): live. Personal seats don't serve
+   gpt-5.5, so the leg is absent there by construction — never substitute a lesser copilot model.
+3. `codex exec` — final fallback. Same ChatGPT quota as leg 1 but a different harness, which is
+   the point: the observed wedge modes (2026-07-05 `--variant high`; 2026-07-06 concurrent
+   cold-start stall) were opencode-side, and only a harness change escapes those.
 
-Personal-machine mechanics: `bootstrap-chatmock.sh` installs the shim (go-chatmock with its
-`CodexClientVersion` pinned to the installed codex CLI — the ChatGPT backend **version-gates
-gpt-5.5** and rejects stale client versions; rerun the bootstrap if "requires a newer version of
-Codex" reappears) and writes `~/.claude/bridge-copilot.env` (machine-local, NEVER synced) holding
-the `COPILOT_PROVIDER_*`/`COPILOT_MODEL` exports. The gate leg sources that env file when present
-and auto-starts the shim — file absent = seat machine — and the command shape is identical either
-way (`--model gpt-5.5` works under both backends). Eval 2026-07-06 (planted-defect diff, 2 runs +
-opencode baseline): copilot+shim caught 3/3 defects with correct severities both runs (40s, 98s),
-opencode 3/3 (30s) — full verdict parity, 0 GitHub premium requests through the shim. Streaming
-liveness holds with a `> file` redirect (so the partial-ndjson wedge diagnosis stays valid), but
-copilot buffers stdout to one end-dump on a PIPE — always redirect to a file.
+Leg 2 liveness is machine-resolved locally, no env files: `opencode models | grep -qx
+'github-copilot/gpt-5.5'` (models list only shows authenticated providers). Wiring it is a one-time
+`opencode auth login` → GitHub Copilot device flow per machine. Record which leg produced every
+verdict: `bridge: opencode-openai | opencode-copilot | codex`.
 
-**The machine boundary is the only work/personal guard now** — never run a personal repo through
-the work laptop's gate (it would ride the org seat); everything on a personal machine rides your
-own quota by construction. Plans stamped `Bridge-mode:` by the 2026-07-06 interim design: the
-stamp is ignored — the chain is machine-resolved. All legs share the same fail-fast timeouts,
-retry-at-SAME-timeout rule, and archive-the-stream telemetry; every verdict records which leg ran
-(`bridge: copilot|opencode|codex`).
+**Why opencode is primary (2026-07-06 eval, planted-defect diff):** at the same pinned model,
+opencode's review was ≥ the copilot harness's — 3/3 defects plus a real leanness catch copilot
+missed in both its runs, all four rubric sections, stable severities, at a third of the latency
+(30s vs 40s/98s). Copilot CLI as a separate harness (and the chatmock BYOK shim behind it) is
+retired from the chain; `bootstrap-chatmock.sh` stays in the repo for reference but nothing reads
+`~/.claude/bridge-copilot.env` anymore.
+
+**Preflight (mandatory before any gate work starts):** `/dev-loop` §1 and `/plan-feature` stage 5
+run one **serialized** probe — `timeout 60 opencode run -m openai/gpt-5.5 --format json "reply OK"`
+— before any fan-out. It absorbs the morning OAuth refresh, proves auth+model resolve, and writes
+the live-leg list to `$REPO/.dev-loop/bridge-ok` (one leg per line, in chain order) so per-task
+gates skip dead legs instead of rediscovering them mid-failure. Probe fails → probe leg 2 → a
+chain with no live opencode leg starts at codex and the run is flagged before any implementation
+work is spent. No marker present (standalone `/review-task`) → the gate probes for itself.
+
+**Concurrency law: never two headless opencode runs at once on a machine.** 2026-07-06 work-laptop
+incident: stage 5 fanned out gates for two sibling repos in parallel; both wedged (suspected
+shared-state contention under `~/.local/share/opencode/` — retries in fresh processes kept hanging
+while the sibling process was alive; serial runs worked). Multi-repo gate legs run **serially** —
+the cost is ~90s per extra repo and buys determinism.
+
+**Timeout law (unchanged, now with teeth):** 300s per-task / 480s plan-gate, foreground. On
+timeout, retry ONCE with the **verbatim same command** — same timeout; a run that "needs more
+time" is a stall. A second timeout means the leg is **dead**: fall to the next leg immediately.
+There is no third attempt and no larger timeout — raising it is how 8 designed minutes became
+23 real ones (480+900, 2026-07-06). Plus the **liveness rule**: 0 bytes of output at 60s = a
+wedged opencode init (the observed failure mode wedges between `init` and session-create and
+never writes anything; healthy runs emit events in ~5s) — kill at 60s, count the attempt.
+
+**The machine boundary is still the only work/personal guard** — never run a personal repo through
+the work laptop's gate (leg 2 there rides the org seat); a personal machine's whole chain rides
+your own ChatGPT quota by construction. `Bridge-mode:` stamps in older plans are ignored.
 
 ## Cross-model gate timing — per-task vs batched (leaf deferral)
 
@@ -111,7 +139,7 @@ API design, copy. **Cost is per-harness, not universal** — it reflects what YO
 
 | model | intelligence | taste | cost in Claude Code (plan usage) | cost in opencode (API) |
 |---|---|---|---|---|
-| fable-5 | 9 | 9 | expensive | expensive |
+| fable-5 | 9 | 9 | NOT plan-included as of 2026-07-07 — API/extra-usage only; never auto-spawn | expensive |
 | opus-4.8 | 7 | 8 | mid | mid |
 | sonnet-5 | 5 | 7 | cheap | cheap |
 | gpt-5.5 | 8 | 5 | ~free (opencode/codex ChatGPT OAuth) | sub-priced via ChatGPT OAuth; API otherwise |
