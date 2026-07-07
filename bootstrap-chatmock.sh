@@ -7,6 +7,10 @@ set -euo pipefail
 SRC="${HOME}/.local/src/go-chatmock"
 BIN="${HOME}/.local/bin/go-chatmock"
 ENV_FILE="${HOME}/.claude/bridge-copilot.env"
+# Pinned to the commit audited 2026-07-06 (outbound = chatgpt.com + auth/api.openai.com only,
+# minimal deps). This code handles the ChatGPT OAuth tokens — NEVER float to origin/HEAD; to
+# take an upstream update, re-audit the diff first, then move this pin deliberately.
+CHATMOCK_COMMIT="8c278a51c5cd7c8d82e48958bdc89ce90e07ba98"
 
 command -v go >/dev/null || { echo "ERROR: go toolchain required" >&2; exit 1; }
 # The ChatGPT backend version-gates gpt-5.5 ("requires a newer version of Codex"): the shim
@@ -16,8 +20,11 @@ CODEX_VER="$(codex --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | h
 [ -n "$CODEX_VER" ] || { echo "ERROR: codex CLI required (shim reuses its auth + client version)" >&2; exit 1; }
 [ -f "${HOME}/.codex/auth.json" ] || { echo "ERROR: ~/.codex/auth.json missing — run 'codex login' first" >&2; exit 1; }
 
-if [ -d "$SRC/.git" ]; then git -C "$SRC" fetch -q --depth 1 origin && git -C "$SRC" reset -q --hard origin/HEAD
-else git clone -q --depth 1 https://github.com/n0madic/go-chatmock "$SRC"; fi
+if [ ! -d "$SRC/.git" ]; then
+  git init -q "$SRC" && git -C "$SRC" remote add origin https://github.com/n0madic/go-chatmock
+fi
+git -C "$SRC" fetch -q --depth 1 origin "$CHATMOCK_COMMIT"
+git -C "$SRC" checkout -q -f "$CHATMOCK_COMMIT"
 sed -i -E "s/(CodexClientVersion\s*=\s*)\"[0-9.]+\"/\1\"${CODEX_VER}\"/" "$SRC/internal/config/codex_client.go"
 
 mkdir -p "$(dirname "$BIN")"
