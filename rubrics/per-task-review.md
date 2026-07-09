@@ -55,6 +55,11 @@ actually exercises it is a finding. Then judge the tests' **quality**, not their
 - **Filler tests are findings, not coverage** — tautologies (`expect(true)`), asserting a mock
   you just configured, snapshot-everything, near-duplicates that inflate the count. Every test
   must assert observable behavior at a contract, not implementation detail.
+- **Tautological expectations** — an assertion that recomputes the expected value the way the
+  code computes it (`expect(add(a, b)).toBe(a + b)`, a snapshot derived by the same logic, a
+  constant compared to itself) passes by construction and can never disagree with the code.
+  Expected values must come from an **independent source of truth** — a known-good literal, a
+  worked example, the task's *accept:* clause.
 - **Mutation reasoning** — take the 1–3 riskiest logic points in the diff and ask: *if this
   operator/branch were flipped or this line deleted, which test fails?* If the answer is "none",
   that logic is untested no matter what coverage says — Important.
@@ -64,6 +69,21 @@ actually exercises it is a finding. Then judge the tests' **quality**, not their
 **Convention / standards** — deviates from this repo's documented standards or the plan's
 patterns (naming, structure, error handling, libraries). Read neighboring code before judging.
 Skip anything tooling already enforces.
+On top of repo standards, carry this **smell baseline** (Fowler, *Refactoring* ch.3). Two rules
+bind it: a documented repo standard **overrides** the baseline, and a smell is always a
+**judgement call reported as Minor** — never blocking on its own. Name the smell, quote the hunk:
+- *Mysterious name* — name doesn't reveal what it does/holds → rename (no honest name = murky design)
+- *Duplicated code* — same logic shape in two hunks/files of this diff → extract, call from both
+- *Data clumps* — same few fields/params keep travelling together → bundle into one type
+- *Primitive obsession* — a primitive standing in for a domain concept → give it a small type
+- *Repeated switches* — same `if`/`switch` cascade on the same type recurs → polymorphism or one shared map
+- *Shotgun surgery* — one logical change scattered across many files → gather into one module
+- *Divergent change* — one module edited for several unrelated reasons → split by reason
+- *Feature envy* — method reaches into another object's data more than its own → move it there
+- *Message chains* — `a.b().c().d()` navigation the caller shouldn't know → hide the walk
+- *Middle man* — mostly just delegates onward → cut it, call the target
+- *Refused bequest* — implementer ignores/overrides most of what it inherits → composition
+(Speculative generality is deliberately absent here — the leanness axis owns it as `yagni`.)
 
 **Stale comments** — flag comments left in the diff that contradict or no longer match the code.
 

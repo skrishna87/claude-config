@@ -28,7 +28,8 @@ criteria about keeping the change small.
 
 2. Align.
    - Clarify expensive-to-reverse product or architecture decisions before grounding.
-   - Ask one question at a time only when the answer is not discoverable from the repo.
+   - Facts vs. decisions: a fact discoverable from the repo → look it up; a decision (intent,
+     priorities, trade-offs) → ask the user, one question at a time, and wait for the answer.
    - Recommend a default answer with the tradeoff.
    - If the user wants a plan without back-and-forth, state assumptions and continue.
 
@@ -55,6 +56,9 @@ criteria about keeping the change small.
      between two tiers, take the higher.
    - Order by dependency. Split tasks that cannot be completed and reviewed as one focused
      coding task.
+   - Wide-refactor exception: one mechanical change with codebase-wide blast radius cannot
+     land green as a vertical slice — sequence it as expand–contract (expand task, migrate
+     batches each blocked-by expand, contract task blocked-by every migrate).
 
 6. Seed progress.
    - Create `docs/<feature>/progress.md` from `assets/progress.md`.

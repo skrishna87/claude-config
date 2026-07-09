@@ -55,6 +55,6 @@ git clone <this-repo> ~/projects/claude-config
 
 Vendored + adapted, kept self-contained and rewired to the `plan.md`/`progress.md` loop:
 
-- [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) — grilling, codebase-design, to-prd, to-issues, review
+- [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) — grilling (facts-vs-decisions split), codebase-design, to-spec (né to-prd), to-tickets (né to-issues, incl. expand–contract), code-review (né review, incl. the Fowler smell baseline), tdd (tautological-test rule)
 - [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) — lean implement mode + leanness review axis
 - [vercel-labs/deepsec](https://github.com/vercel-labs/deepsec) (Apache-2.0) — security knowledge distilled into `reference/security-review.md` (no scanner vendored)

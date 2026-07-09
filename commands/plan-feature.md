@@ -27,6 +27,14 @@ unless it touches auth or a reused contract), and note that plain plan mode + `/
 on the final diff may beat the loop entirely. The user picks; if they choose full anyway, run
 it. Never silently bypass stages — downgrade explicitly at the start, or not at all.
 
+The opposite failure is **too big**: if Stage 1 keeps hitting decisions that can't be locked in
+this session (they need research, a prototype, or an answer from someone who isn't here), don't
+slice fog into tasks — plan.md is the loop's root of trust, and fog written down as tasks
+becomes N confidently-wrong implementations. Plan up to the fog line: lock and slice what is
+decidable now, record each unresolved unknown under **Out of scope / deferred** with what would
+unlock it (a research note, a prototype, a stakeholder answer), and tell the user the deferred
+part wants its own `/plan-feature` once the answers exist.
+
 ---
 
 ## Stage 1 — Align (grill)
@@ -37,8 +45,11 @@ Walk down each branch of the design tree, resolving dependencies between decisio
 - **One question at a time.** Wait for the answer before the next. Asking several at once is
   bewildering.
 - **Recommend an answer to every question** — don't just ask, propose, with the why.
-- **If a question can be answered by reading the codebase, read the codebase** instead of
-  asking. Only ask the human what only the human knows (intent, priorities, product calls).
+- **Facts vs. decisions.** If a *fact* can be found by exploring the codebase, look it up
+  instead of asking. The *decisions* (intent, priorities, product calls, trade-offs) are the
+  user's — put each one to the user and **wait for the answer**. Never answer a decision on
+  the user's behalf, however obvious the answer looks: a grilling session that answers its own
+  questions has stopped grilling.
 - Surface the decisions that will be expensive to reverse first.
 
 > Grilling discipline adapted from Matt Pocock's `grilling` skill (MIT).
@@ -108,7 +119,8 @@ new interview — just write down what you already know. Fill:
 
 Leave **Tasks** empty for now.
 
-> PRD/seam-sketch shape adapted from Matt Pocock's `to-prd` skill (MIT), minus the issue tracker.
+> PRD/seam-sketch shape adapted from Matt Pocock's `to-spec` skill (formerly `to-prd`, MIT),
+> minus the issue tracker.
 
 **PAUSE.** Show the drafted plan.md (everything but Tasks). Ask: *"Spec right before I slice it?"*
 Wait for go.
@@ -127,6 +139,16 @@ checklist.
 - Any prefactoring ("make the change easy, then make the easy change") is its own first slice.
 - Order by dependency — a slice's blockers come before it.
 </vertical-slice-rules>
+
+**Wide refactors are the exception to vertical slicing.** A wide refactor is ONE mechanical
+change — rename a column, retype a shared symbol — whose blast radius (Stage 2 mapped it) fans
+across the codebase, so no vertical slice can land green. Don't force a tracer bullet; sequence
+it as **expand–contract**: an *expand* task adds the new form beside the old (nothing breaks);
+*migrate* tasks move call sites over in batches sized by blast radius (per package / per
+directory), each `blocked-by` the expand — verify stays green batch to batch because the old
+form still exists; a final *contract* task deletes the old form, `blocked-by` every migrate
+batch. If even the batches can't stay green alone, keep the same sequence but say so in the
+plan — green is then promised only at the integration gate, not per task.
 
 For each slice give: a one-line title, **acceptance criteria** (the checks that prove it), and
 **blocked-by** (earlier slices it needs), in the plan.md task format. Keep slices small enough
@@ -176,8 +198,8 @@ the remaining independent tasks, each tagged `[lane:<repo>]`. `/dev-loop` runs t
 concurrently once the prefix lands (see its §3). A single-repo feature needs no lane tags — omit
 them and the loop stays sequential. Do not put a cross-repo contract task in a lane; it's prefix.
 
-> Slicing discipline adapted from Matt Pocock's `to-issues` skill (MIT), emitting a plan.md
-> checklist instead of tracker issues.
+> Slicing discipline (incl. expand–contract) adapted from Matt Pocock's `to-tickets` skill
+> (formerly `to-issues`, MIT), emitting a plan.md checklist instead of tracker issues.
 
 **PAUSE.** Present the slice list: *granularity right (too coarse / too fine)? dependencies
 correct? anything to merge or split?* Iterate until approved.

@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# keepawake — hold a system wake lock so the machine doesn't idle-sleep while work runs.
+#
+# Modes:
+#   keepawake <command> [args...]            wrap: lock held until the command exits
+#   keepawake --while '<pgrep -f pattern>'   watch: lock held while any process matches the
+#             [--grace SECS]                 pattern; releases after it's been gone GRACE
+#                                            seconds (default 300), then exits
+#
+# Platforms (auto-detected):
+#   macOS  -> caffeinate -i
+#   WSL2   -> powershell.exe SetThreadExecutionState (holds the WINDOWS host awake)
+#   Linux  -> systemd-inhibit --what=sleep:idle
+#
+# Holds the SYSTEM awake, not the display. Closing the laptop lid still sleeps the
+# machine on Windows unless the lid action is set to "Do nothing" while plugged in.
+set -euo pipefail
+
+GRACE=300
+PATTERN=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --while) PATTERN="${2:?--while needs a 'pgrep -f' pattern}"; shift 2 ;;
+    --grace) GRACE="${2:?--grace needs seconds}"; shift 2 ;;
+    --help|-h) sed -n '2,17p' "$0"; exit 0 ;;
+    *) break ;;
+  esac
+done
+
+platform() {
+  if [[ "$(uname -s)" == Darwin ]]; then echo mac
+  elif grep -qi microsoft /proc/version 2>/dev/null; then echo wsl
+  elif command -v systemd-inhibit >/dev/null 2>&1; then echo linux
+  else echo none; fi
+}
+PLAT="$(platform)"
+if [[ "$PLAT" == none ]]; then
+  echo "keepawake: no supported wake-lock mechanism found on this system" >&2
+  exit 1
+fi
+if [[ "$PLAT" == wsl ]] && ! command -v powershell.exe >/dev/null 2>&1; then
+  echo "keepawake: powershell.exe not reachable from WSL (interop disabled?)" >&2
+  exit 1
+fi
+
+# ES_CONTINUOUS | ES_SYSTEM_REQUIRED = 0x80000001: system stays awake, display may sleep.
+# The flag clears automatically when the powershell process exits.
+ps_keepalive_encoded() {
+  local src
+  src=$(cat <<'EOF'
+Add-Type -Namespace W -Name P -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint f);'
+while ($true) { [void][W.P]::SetThreadExecutionState(2147483649); Start-Sleep -Seconds 30 }
+EOF
+)
+  printf '%s' "$src" | iconv -f UTF-8 -t UTF-16LE | base64 -w0
+}
+
+start_lock() {
+  case "$PLAT" in
+    mac)   caffeinate -i & ;;
+    linux) systemd-inhibit --what=sleep:idle --who=keepawake \
+             --why="keepawake${PATTERN:+ --while $PATTERN}" sleep infinity & ;;
+    wsl)   powershell.exe -NoProfile -NonInteractive \
+             -EncodedCommand "$(ps_keepalive_encoded)" >/dev/null 2>&1 & ;;
+  esac
+  echo $!
+}
+
+LOCK_PID=""
+release() { [[ -n "$LOCK_PID" ]] && kill "$LOCK_PID" 2>/dev/null || true; }
+trap release EXIT INT TERM
+
+# ---- wrap mode --------------------------------------------------------------
+if [[ -z "$PATTERN" ]]; then
+  [[ $# -gt 0 ]] || { echo "keepawake: need a command or --while '<pattern>' (see --help)" >&2; exit 2; }
+  case "$PLAT" in
+    mac)   exec caffeinate -i "$@" ;;
+    linux) exec systemd-inhibit --what=sleep:idle --who=keepawake --why="keepawake: $*" -- "$@" ;;
+    wsl)   LOCK_PID="$(start_lock)"
+           "$@"; rc=$?
+           exit "$rc" ;;
+  esac
+fi
+
+# ---- watch mode -------------------------------------------------------------
+# pgrep -f also matches the shell that launched us (its cmdline contains the
+# pattern), so exclude our own ancestor chain and the lock child.
+ancestors() {
+  local p=$$
+  while [[ -n "$p" && "$p" -gt 1 ]]; do
+    echo "$p"
+    p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ') || break
+  done
+}
+EXCLUDE="$(ancestors)"
+
+matches() {
+  local pid cmd
+  while read -r pid cmd; do
+    [[ -z "$pid" ]] && continue
+    grep -qxF "$pid" <<<"$EXCLUDE" && continue      # our launcher chain
+    [[ "$pid" == "${LOCK_PID:-}" ]] && continue     # our lock child
+    [[ "$cmd" == *keepawake* ]] && continue         # another keepawake carrying the pattern
+    return 0
+  done < <(pgrep -af "$PATTERN")
+  return 1
+}
+
+last_seen=$(date +%s)
+while :; do
+  if matches; then
+    last_seen=$(date +%s)
+    if [[ -z "$LOCK_PID" ]] || ! kill -0 "$LOCK_PID" 2>/dev/null; then
+      LOCK_PID="$(start_lock)"
+      echo "$(date '+%F %T') keepawake: lock acquired ($PLAT, lock pid $LOCK_PID) — pattern: $PATTERN"
+    fi
+  elif (( $(date +%s) - last_seen > GRACE )); then
+    break
+  fi
+  sleep 20
+done
+echo "$(date '+%F %T') keepawake: pattern gone >${GRACE}s — lock released, exiting"

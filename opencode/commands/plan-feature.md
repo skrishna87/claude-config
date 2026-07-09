@@ -30,6 +30,11 @@ gate audits plan-bug propagation across many tasks — a 2-task plan doesn't hav
 unless it touches auth or a reused contract). The user picks; if they choose full anyway, run
 it. Never silently bypass stages — downgrade explicitly at the start, or not at all.
 
+The opposite failure is **too big**: if Stage 1 keeps hitting decisions that can't be locked in
+this session (needs research, a prototype, an absent stakeholder), don't slice fog into tasks —
+plan up to the fog line, park each unknown under **Out of scope / deferred** with what would
+unlock it, and tell the user the deferred part wants its own /plan-feature once answers exist.
+
 ---
 
 ## Stage 1 — Align (grill)
@@ -39,8 +44,9 @@ each branch of the design tree, resolving dependencies between decisions one by 
 
 - **One question at a time.** Wait for the answer before the next.
 - **Recommend an answer to every question** — don't just ask; propose, with the why.
-- **If a question can be answered by reading the codebase, read the codebase.** Only ask the
-  human what only the human knows (intent, priorities, product calls).
+- **Facts vs. decisions.** A *fact* findable in the codebase → look it up instead of asking.
+  A *decision* (intent, priorities, product calls, trade-offs) is the user's — put it to them
+  and wait; never answer a decision on their behalf, however obvious it looks.
 - Surface the decisions that will be expensive to reverse first.
 
 **PAUSE.** Summarize the locked decisions in a few bullets and ask: *"Aligned? Anything to
@@ -108,6 +114,11 @@ Break the plan into **tracer-bullet vertical slices** in plan.md's **Tasks** che
 - A completed slice is demoable or verifiable on its own.
 - Any prefactoring ("make the change easy, then make the easy change") is its own first slice.
 - Order by dependency; when in doubt about size, split.
+- **Wide-refactor exception**: ONE mechanical change with codebase-wide blast radius (rename a
+  column, retype a shared symbol) can't land green as a vertical slice — sequence it as
+  **expand–contract** instead: expand task (new form beside old), migrate tasks in
+  blast-radius-sized batches (each *blocked-by* expand, green batch to batch), contract task
+  deleting the old form (*blocked-by* every migrate).
 
 Each task's tickable line is `- [ ] n. [S|M|L] <title> - *blocked-by:* <none | task n>`, with
 its `interfaces:` and `accept:` as indented sub-bullets (shape below).

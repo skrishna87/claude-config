@@ -30,7 +30,10 @@ Optional [lane:<repo>] = parallel-lane assignment for a multi-repo feature (see 
 omit for a single-repo/sequential plan.
 Per task, to starve `semantics` fix-cycles: *interfaces:* = the exact consume/produce signatures
 of the seam it crosses (from the Seam map, not prose); *accept:* clauses name EXACT expected
-values (status code, sentinel, enum, zero-vs-null, count) — never "handles it correctly".>
+values (status code, sentinel, enum, zero-vs-null, count) — never "handles it correctly".
+Wide refactor (one mechanical change, codebase-wide blast radius)? Don't force vertical slices —
+expand–contract: expand task, migrate batches (each blocked-by expand), contract task
+(blocked-by all migrates); see /plan-feature Stage 4.>
 - [ ] 1. [M] <title> — *blocked-by:* <none | task n>
   - *interfaces:* consumes `<sig>` · produces `<sig>`
   - *accept:* <clause with an exact value>; <clause with an exact value>
