@@ -3,7 +3,10 @@ description: Locked-gate rubric reviewer — the CROSS-MODEL half of the pair. S
 mode: subagent
 # Pin to a DIFFERENT provider than your primary agent — cross-model independence is this
 # agent's entire purpose. List ids: `opencode models`; auth: `opencode auth login`.
-model: openai/gpt-5.5
+# Preferred pin (2026-07-09): github-copilot/gpt-5.6-sol — served ONLY by a Copilot seat
+# (ChatGPT OAuth rejects it; metered premium requests). On a machine whose `opencode models`
+# does NOT list it, repoint this to the fallback `openai/gpt-5.5` (default variant, as ever).
+model: github-copilot/gpt-5.6-sol
 temperature: 0.1
 permission:
   edit: deny

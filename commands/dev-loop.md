@@ -57,8 +57,10 @@ implementation work is spent. The probe MUST use the gate's own invocation shape
 the worktree and `< /dev/null` (opencode ≥ 1.17.15 blocks forever on inherited stdin on a non-TTY,
 2026-07-07); a bare probe can pass while every gate wedges.
 Write the live legs to `<worktree>/.dev-loop/bridge-ok`, one per line in chain order
-(`openai/gpt-5.5` if the probe answered; `github-copilot/gpt-5.5` iff `opencode models | grep -qx
-'github-copilot/gpt-5.5'`; neither → leave the file empty so gates start at codex and flag it).
+(`github-copilot/gpt-5.6-sol` FIRST iff `opencode models | grep -qx 'github-copilot/gpt-5.6-sol'`
+— the preferred gate model, Copilot-seat machines only; then `openai/gpt-5.5` if the probe
+answered; then `github-copilot/gpt-5.5` iff `opencode models | grep -qx
+'github-copilot/gpt-5.5'`; none → leave the file empty so gates start at codex and flag it).
 Per-task gates read this marker instead of rediscovering dead legs mid-failure (`/review-task` §4).
 Multi-lane runs: ONE preflight, then remember the concurrency law — gate legs are headless opencode
 runs and **two must never execute at once on a machine**, so lanes serialize their gate steps even

@@ -1,5 +1,5 @@
 ---
-description: Locked review gate — cross-model rubric review (Claude self + GPT via the opencode bridge, provider-switch retries openai → github-copilot, codex final fallback) plus dedicated security and leanness passes, over a task's diff or a whole feature. The ONLY reviewer /dev-loop uses.
+description: Locked review gate — cross-model rubric review (Claude self + GPT via the opencode bridge; preferred github-copilot/gpt-5.6-sol where served, then gpt-5.5 via openai → github-copilot → codex) plus dedicated security and leanness passes, over a task's diff or a whole feature. The ONLY reviewer /dev-loop uses.
 argument-hint: "[repo/worktree path] [--integration <base-ref> for a whole-feature review] [--re-review after a fix cycle, with the prior blocking findings]"
 ---
 
@@ -96,20 +96,24 @@ the verdict so the deferral is visible, never silent. This applies to the **per-
 at `--integration`, and for any `[L]` task, Reviewer B **always** runs. Not a leaf (or unsignaled)
 → run it as below.
 
-**The bridge chain (every gate, every machine): opencode(openai) → opencode(github-copilot) →
-codex.** One harness — opencode; a retry switches the PROVIDER inside it, never the harness and
-never the model (§ Bridge chain in `~/.claude/reference/model-policy.md`). Every leg pins
-`gpt-5.5`, so falling back changes whose OAuth carries the request, never the verdict's model.
-Record the leg that produced the verdict as `bridge: opencode-openai|opencode-copilot|codex`
+**The bridge chain (every gate, every machine): opencode(github-copilot **sol**, where served) →
+opencode(openai) → opencode(github-copilot) → codex.** One harness — opencode; a retry switches
+the PROVIDER inside it, never the harness (§ Bridge chain in
+`~/.claude/reference/model-policy.md`). The **preferred model is `github-copilot/gpt-5.6-sol`**,
+which ONLY a Copilot seat can serve (ChatGPT OAuth rejects it) — so where that leg is absent or
+dies, the chain continues on `gpt-5.5` for every remaining leg; that sol→5.5 hop is the one model
+change in the chain, and it must be visible in the verdict. Record the leg AND model that
+produced the verdict as `bridge: opencode-copilot(sol)|opencode-openai|opencode-copilot|codex`
 alongside `coverage:`.
 
 **Leg liveness — read the preflight marker first.** The driver's preflight (dev-loop §1 /
 plan-feature stage 5) writes `$REPO/.dev-loop/bridge-ok` — the live legs, one per line, in chain
 order. Present → run only the listed legs (the others were probed dead at run start; don't
 rediscover mid-gate). Absent (standalone invocation) → probe for yourself before the first gate:
-`timeout 60 opencode run --dir "$REPO" -m openai/gpt-5.5 --format json "reply OK" < /dev/null`; leg 2 exists only if
-`opencode models | grep -qx 'github-copilot/gpt-5.5'` (personal Copilot seats don't serve gpt-5.5 —
-that leg is org-seat-machines-only; NEVER substitute a lesser copilot model).
+`timeout 60 opencode run --dir "$REPO" -m openai/gpt-5.5 --format json "reply OK" < /dev/null`; the
+copilot legs exist only if `opencode models | grep -qx 'github-copilot/gpt-5.6-sol'` (sol leg) /
+`... 'github-copilot/gpt-5.5'` (5.5 retry leg) — personal Copilot seats serve neither, so those
+legs are org-seat-machines-only; NEVER substitute a lesser copilot model.
 
 **Concurrency + retry laws (bind every leg):**
 - **stdin law — `< /dev/null` on EVERY opencode invocation, mandatory.** opencode ≥ 1.17.15
@@ -146,7 +150,15 @@ that leg is org-seat-machines-only; NEVER substitute a lesser copilot model).
   attempt and NEVER a larger timeout (raising 480→900 "to give it room" is how 8 designed minutes
   became 23 real ones, 2026-07-06).
 
-**opencode openai leg (primary):**
+**opencode github-copilot SOL leg (preferred, where served):** `github-copilot/gpt-5.6-sol` in
+the `bridge-ok` marker (or in `opencode models`) → run the openai-leg command below FIRST with
+only the model flag changed: `-m github-copilot/gpt-5.6-sol`. Same prompt, same jq, same laws
+(stdin, liveness kill, timeout, verbatim retry once). This rides the machine's Copilot seat on
+metered premium requests (work laptop = org seat — one more reason personal repos never gate on
+the work laptop). Leg absent → skip silently to the openai leg (sol has no other transport). Leg
+dead after its retry → continue the chain on `gpt-5.5` and record the model change in the verdict.
+
+**opencode openai leg (first gpt-5.5 fallback):**
 
 ```bash
 timeout 300 opencode run --dir "$REPO" -m openai/gpt-5.5 --agent plan --format json \
@@ -179,7 +191,8 @@ Then read `$REPO/.dev-loop/cross-review.md` — the concatenated review text, en
   mode emits each text chunk as an NDJSON `{"type":"text",...,"part":{"text":...}}` line that
   survives redirection; the jq above reassembles them. If `$REPO/.dev-loop/cross-review.md` is empty
   after this, it's a real failure (check `$REPO/.dev-loop/cross-review.err` + exit code) — not the capture bug.
-- **Model pinned to `openai/gpt-5.5` at DEFAULT variant — NEVER add `--variant high`.** Reasoning
+- **Gate model at DEFAULT variant — NEVER add `--variant high`** (binds the sol leg and the
+  `openai/gpt-5.5` fallback legs alike). Reasoning
   effort is a separate axis from the model. Re-benchmarked 2026-07-05 on a real 413-line gate diff:
   `--variant high` spent **600s emitting zero stream bytes and never returned** (opencode does not
   stream thinking tokens, so a long silent-reasoning phase is indistinguishable from a wedged
@@ -199,7 +212,7 @@ Then read `$REPO/.dev-loop/cross-review.md` — the concatenated review text, en
   non-zero or timeout, retry once, then fall back. A healthy default-variant review is ~90s, so a
   run pinned at the 300s timeout is a real stall, not slow reasoning — retry, then fall back;
   don't raise it.
-**opencode github-copilot leg (provider-switch retry):** primary leg dead AND
+**opencode github-copilot leg (gpt-5.5 provider-switch retry):** openai leg dead AND
 `github-copilot/gpt-5.5` in the `bridge-ok` marker (or in `opencode models`) → the **identical
 command with only the model flag changed**: `-m github-copilot/gpt-5.5`. Same prompt, same
 timeout, same jq, same retry law. This rides the machine's Copilot seat (work laptop = org
