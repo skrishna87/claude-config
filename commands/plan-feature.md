@@ -229,24 +229,21 @@ cp "<abs>/docs/<feature>/plan.md" "$REPO/.dev-loop/plan.md"
 
 Then run the audit through the bridge chain (§ Bridge chain in
 `~/.claude/reference/model-policy.md`). **Preflight first, before any audit runs**: one serialized
-`timeout 60 opencode run --dir "$REPO" -m openai/gpt-5.5 --format json "reply OK" < /dev/null` —
+`timeout 60 opencode run --dir "$REPO" -m openai/gpt-5.6-sol --format json "reply OK" < /dev/null` —
 it absorbs the cold-start OAuth refresh and proves auth+model resolve **in the gate's own
 invocation shape** (`--dir` + `< /dev/null`; opencode ≥ 1.17.15 blocks forever on inherited stdin
 on a non-TTY — 2026-07-07 — so a bare probe can pass while every gate wedges). Write the live legs to `$REPO/.dev-loop/bridge-ok`,
-one per line in chain order (`github-copilot/gpt-5.6-sol` FIRST iff `opencode models | grep -qx
-'github-copilot/gpt-5.6-sol'` — the preferred gate model; then `openai/gpt-5.5` if the probe
-answered; then `github-copilot/gpt-5.5` iff
-`opencode models | grep -qx 'github-copilot/gpt-5.5'`). **Multi-repo plan → run the per-repo
+one per line in chain order: `openai/gpt-5.6-sol` if the probe answers, plus
+`github-copilot/gpt-5.6-sol` iff `opencode models | grep -qx 'github-copilot/gpt-5.6-sol'` (a
+Copilot seat — absent → the leg is a no-op, omit it). **Multi-repo plan → run the per-repo
 audits SERIALLY — never two headless opencode runs at once on a machine** (concurrent instances
-wedge each other on shared local state; the 2026-07-06 ui/api incident). Where `bridge-ok` lists
-the sol leg, run the block below FIRST with `-m github-copilot/gpt-5.6-sol`; that leg absent or
-dead → the block as written (`openai/gpt-5.5`) is the fallback chain start. When a leg dies (one
-verbatim retry at the SAME 480s, second timeout = leg
-dead), fall to the next leg — `-m github-copilot/gpt-5.5` — where that leg
-is live, then codex per `/review-task` §4's final-fallback shape:
+wedge each other on shared local state; the 2026-07-06 ui/api incident). When the openai leg dies
+(one verbatim retry at the SAME 480s, second timeout = leg dead), fall to the copilot leg — the
+block below with `-m github-copilot/gpt-5.6-sol` — where `bridge-ok` lists it, then to codex per
+`/review-task` §4's final-fallback shape:
 
 ```bash
-timeout 480 opencode run --dir "$REPO" -m openai/gpt-5.5 --agent plan --format json \
+timeout 480 opencode run --dir "$REPO" -m openai/gpt-5.6-sol --agent plan --format json \
   "You are doing a READ-ONLY audit — do not modify any files. Use fast reads only (git, cat, grep);
 do not run builds or the test suite. (Reading dependency sources outside the repo IS in scope for
 this audit — see point 8 — but nothing else outside it.)
@@ -285,8 +282,8 @@ jq -r 'select(.type=="text") | .part.text' "$REPO/.dev-loop/plan-review.ndjson" 
 Then read `$REPO/.dev-loop/plan-review.md` — the extracted findings, ending with the audit's summary.
 (Scratch lives in `$REPO/.dev-loop/`, never `/tmp` — a machine-global path would collide across
 concurrent loops on different projects; `.dev-loop/` is per-worktree and git-excluded.)
-Bridge rules are `/review-task` §4 Reviewer B's: preferred model `github-copilot/gpt-5.6-sol`
-where that leg is live, fallback pin `openai/gpt-5.5`; either at **default variant**
+Bridge rules are `/review-task` §4 Reviewer B's: primary `openai/gpt-5.6-sol`, then
+`github-copilot/gpt-5.6-sol` where a seat serves it, then codex; at **default variant**
 (NEVER `--variant high` — it silent-reasons for 10min+ and never returns; see §4), `--format json` +
 the `jq` extraction (default output drops the message on redirect), `< /dev/null` on every leg
 (opencode ≥ 1.17.15 and codex both hang forever reading inherited stdin on a non-TTY), the

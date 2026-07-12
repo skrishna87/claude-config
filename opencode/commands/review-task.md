@@ -51,11 +51,11 @@ Spawn via the task tool, each with a crafted brief — repo path, the exact diff
   `~/.config/opencode/dev-loop/reference/model-policy.md`): skip it here and report `coverage:
   BATCHED`, its diff is covered by the cross-model pass at integration. Leaf deferral is per-task
   ONLY — at `--integration`, and for any `[L]` task, it always runs. Its pin is
-  `github-copilot/gpt-5.6-sol` (preferred, Copilot-seat machines only); if this machine's
-  copilot doesn't serve sol or the provider is down, fall back to `openai/gpt-5.5` (repoint the
-  agent's `model:` — the frontmatter comment carries the rule) and note the model in the
-  verdict. Only when NO cross-provider leg works, proceed single-model and **explicitly flag
-  coverage as DEGRADED** — never silently drop the cross-model half.
+  `openai/gpt-5.6-sol`; if that provider is down, fall back to `github-copilot/gpt-5.6-sol` where
+  this machine's opencode serves it (a Copilot seat — separate quota, the OpenAI-quota-exhaustion
+  fallback; repoint the agent's `model:` — the frontmatter comment carries the rule), then to
+  codex, noting the leg in the verdict. Only when NO cross-model leg works, proceed single-model
+  and **explicitly flag coverage as DEGRADED** — never silently drop the cross-model half.
 - **`security-reviewer`** — `--integration` mode ONLY. Security is a whole-surface property;
   on a per-task diff the rubric's Security check under the two reviewers already covers
   in-diff vulns. P0/P1 block; P2 advisory.

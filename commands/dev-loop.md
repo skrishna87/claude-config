@@ -51,16 +51,15 @@ source. Resuming → reuse the recorded worktree/branch. Creating → `git -C <s
 progress.md; no remote → record `Published: no` and continue — orchestrators then skip pushing).
 
 **Bridge preflight (once per run, before the first orchestrator spawns):** one serialized
-`timeout 60 opencode run --dir <worktree> -m openai/gpt-5.5 --format json "reply OK" < /dev/null`
+`timeout 60 opencode run --dir <worktree> -m openai/gpt-5.6-sol --format json "reply OK" < /dev/null`
 — absorbs the cold-start OAuth refresh and proves the gate's primary leg resolves before any
 implementation work is spent. The probe MUST use the gate's own invocation shape — `--dir` into
 the worktree and `< /dev/null` (opencode ≥ 1.17.15 blocks forever on inherited stdin on a non-TTY,
 2026-07-07); a bare probe can pass while every gate wedges.
-Write the live legs to `<worktree>/.dev-loop/bridge-ok`, one per line in chain order
-(`github-copilot/gpt-5.6-sol` FIRST iff `opencode models | grep -qx 'github-copilot/gpt-5.6-sol'`
-— the preferred gate model, Copilot-seat machines only; then `openai/gpt-5.5` if the probe
-answered; then `github-copilot/gpt-5.5` iff `opencode models | grep -qx
-'github-copilot/gpt-5.5'`; none → leave the file empty so gates start at codex and flag it).
+Write the live legs to `<worktree>/.dev-loop/bridge-ok`, one per line in chain order:
+`openai/gpt-5.6-sol` if the probe answers, plus `github-copilot/gpt-5.6-sol` iff `opencode models |
+grep -qx 'github-copilot/gpt-5.6-sol'` (a Copilot seat — the OpenAI-quota-exhaustion fallback;
+absent → no-op, omit it). No live leg → leave the file empty so gates start at codex and flag it.
 Per-task gates read this marker instead of rediscovering dead legs mid-failure (`/review-task` §4).
 Multi-lane runs: ONE preflight, then remember the concurrency law — gate legs are headless opencode
 runs and **two must never execute at once on a machine**, so lanes serialize their gate steps even

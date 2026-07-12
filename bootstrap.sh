@@ -40,7 +40,7 @@ echo "linked  $HOME/.local/bin/keepawake  ->  $REPO/bin/keepawake"
 if ! command -v opencode >/dev/null 2>&1; then
   if command -v codex >/dev/null 2>&1; then
     echo "WARNING: opencode CLI not found — /review-task's cross-model reviewer (Reviewer B) will \
-use the codex exec FALLBACK until opencode is installed + authed (openai/gpt-5.5)." >&2
+use the codex exec FALLBACK until opencode is installed + authed (openai/gpt-5.6-sol)." >&2
   else
     echo "WARNING: neither opencode nor codex CLI found — /review-task's cross-model reviewer \
 (Reviewer B) will run DEGRADED (single-model) until one is installed + authed." >&2

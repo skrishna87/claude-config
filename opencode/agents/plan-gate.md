@@ -4,10 +4,10 @@ mode: subagent
 # Pin this to a DIFFERENT provider than your primary agent — the value of this gate is
 # cross-model independence, not this specific model. List available ids: `opencode models`;
 # make sure the provider is authed (`opencode auth login`).
-# Preferred pin (2026-07-09): github-copilot/gpt-5.6-sol — served ONLY by a Copilot seat
-# (ChatGPT OAuth rejects it; metered premium requests). On a machine whose `opencode models`
-# does NOT list it, repoint this to the fallback `openai/gpt-5.5` (default variant, as ever).
-model: github-copilot/gpt-5.6-sol
+# Pin (2026-07-12): served directly through opencode's OpenAI auth. If the openai leg is
+# quota-exhausted or down, repoint to `github-copilot/gpt-5.6-sol` where this machine's
+# `opencode models` lists it (a Copilot seat = separate quota), else fall back to codex.
+model: openai/gpt-5.6-sol
 temperature: 0.1
 permission:
   edit: deny

@@ -43,7 +43,7 @@ Untagged tasks (plans written before this policy) = `M`.
 | Implementer, `[S]`/`[M]` task | **budget** | Claude Code: spawn implementer subagent with `model: sonnet` · opencode: `task-implementer-lite` |
 | Implementer, `[L]` task | session model | Claude Code: omit `model` (inherit) · opencode: `task-implementer` |
 | Fix cycles | per rule 4 | escalate on `design`/`semantics` cause |
-| Gate reviewers (both halves) | **strong — never below session** | Claude Code: inherit + GPT via the bridge chain (preferred `github-copilot/gpt-5.6-sol` where that leg is live, else `openai/gpt-5.5`; **default variant — never `--variant high`**; transport per § Bridge chain) · opencode: `task-reviewer` (inherits) + `task-reviewer-cross` (pinned) |
+| Gate reviewers (both halves) | **strong — never below session** | Claude Code: inherit + GPT via the bridge chain (`openai/gpt-5.6-sol`, copilot-sol fallback where served, then codex; **default variant — never `--variant high`**; transport per § Bridge chain) · opencode: `task-reviewer` (inherits) + `task-reviewer-cross` (pinned) |
 | Plan-gate, security, integration | session model (the ceiling) | root-of-trust and whole-surface passes — run at the session model by inheriting, NEVER by passing an explicit stronger `model:` |
 
 **Ceiling rule (2026-07-07):** the session model is the MAX tier everywhere. "Strong" always means
@@ -54,49 +54,45 @@ model; the tiers follow it by construction.
 
 ## Bridge chain — which transport carries the pinned gate model
 
-**One harness on every machine: opencode.** The legs of the chain are *providers inside it*, not
-different CLIs — a retry switches whose OAuth carries the request, never the harness. Below
-leg 1 the model is `gpt-5.5` (default variant) on every leg; the ONE model change in the chain
-is falling out of the sol leg, because sol has no other transport:
+**One primary harness on every machine: opencode.** `gpt-5.6-sol` is served directly through
+opencode's OpenAI auth, so that's the primary leg everywhere. The chain:
 
-1. `opencode run -m github-copilot/gpt-5.6-sol` — **preferred (2026-07-09), only where the
-   machine's Copilot seat serves sol** (work laptop; check `opencode models`). ChatGPT OAuth
-   rejects sol, so this leg absent or dead (after the standard retry) → continue below on
-   gpt-5.5 and record the model switch in the verdict.
-2. `opencode run -m openai/gpt-5.5` — fallback primary (ChatGPT-plan OAuth; opencode's own
-   openai login).
-3. `opencode run -m github-copilot/gpt-5.5` — provider-switch retry, **only where the machine's
-   Copilot login serves gpt-5.5**. Work laptop (org seat): live. Personal seats don't serve
-   gpt-5.5, so the leg is absent there by construction — never substitute a lesser copilot model.
-4. `codex exec` — final fallback. Same ChatGPT quota as leg 2 but a different harness, which is
+1. `opencode run -m openai/gpt-5.6-sol` — primary (ChatGPT-plan OAuth; opencode's own OpenAI
+   login), at the default variant. **Deplete this quota first** — it's the free/sub-priced pool.
+2. `opencode run -m github-copilot/gpt-5.6-sol` — copilot fallback, **live only where `opencode
+   models | grep -qx 'github-copilot/gpt-5.6-sol'` lists it** (a machine with a Copilot seat authed
+   into opencode). Same command as leg 1 with only the `-m` flag changed; same laws (stdin,
+   liveness kill, timeout, one verbatim retry). Where the leg isn't listed it's a **no-op** — skip
+   straight to codex. This leg rides the Copilot seat (metered premium requests) — a **separate
+   quota pool** from leg 1, so it's the ONE fallback that survives an OpenAI-quota exhaustion (codex
+   below shares leg 1's quota and can't).
+3. `codex exec` — final fallback. Same ChatGPT quota as leg 1 but a different harness, which is
    the point: the observed wedge modes (2026-07-05 `--variant high`; 2026-07-06 concurrent
    cold-start stall; 2026-07-07 stdin-EOF block) were opencode-side, and only a harness change
    escapes those.
 
-Copilot-leg liveness (legs 1 and 3) is machine-resolved locally, no env files: `opencode models |
-grep -qx 'github-copilot/gpt-5.6-sol'` / `... 'github-copilot/gpt-5.5'` (models list only shows
-authenticated providers). Wiring it is a one-time `opencode auth login` → GitHub Copilot device
-flow per machine. Record which leg AND model produced every verdict:
-`bridge: opencode-copilot(sol) | opencode-openai | opencode-copilot | codex`.
+Leg liveness is machine-resolved locally: `opencode models | grep -qx 'openai/gpt-5.6-sol'` /
+`... 'github-copilot/gpt-5.6-sol'` (the models list only shows authenticated providers). Wiring a
+leg is a one-time `opencode auth login` per provider. Record which leg produced every verdict:
+`bridge: opencode-openai | opencode-copilot | codex`.
 
 **Why opencode is primary (2026-07-06 eval, planted-defect diff):** at the same pinned model,
 opencode's review was ≥ the copilot harness's — 3/3 defects plus a real leanness catch copilot
 missed in both its runs, all four rubric sections, stable severities, at a third of the latency
-(30s vs 40s/98s). Copilot CLI as a separate harness (and the chatmock BYOK shim behind it) is
-retired from the chain; `bootstrap-chatmock.sh` stays in the repo for reference but nothing reads
-`~/.claude/bridge-copilot.env` anymore.
+(30s vs 40s/98s). Copilot CLI as a separate harness — and the chatmock BYOK shim formerly behind
+it — is retired; the surviving copilot leg rides *inside* opencode as a provider (leg 2), not a
+separate CLI.
 
 **Preflight (mandatory before any gate work starts):** `/dev-loop` §1 and `/plan-feature` stage 5
-run one **serialized** probe — `timeout 60 opencode run --dir "$REPO" -m openai/gpt-5.5 --format
+run one **serialized** probe — `timeout 60 opencode run --dir "$REPO" -m openai/gpt-5.6-sol --format
 json "reply OK" < /dev/null` — before any fan-out, **in the gate's own invocation shape** (`--dir`
 + `< /dev/null`): a probe that differs from the gates in stdin or working directory can pass while
 every gate wedges (2026-07-07). It absorbs the morning OAuth refresh, proves auth+model resolve, and writes
-the live-leg list to `$REPO/.dev-loop/bridge-ok` (one leg per line, in chain order — the sol leg
-first when `opencode models` lists it) so per-task
-gates skip dead legs instead of rediscovering them mid-failure. Probe fails → probe the other
-opencode legs → a
-chain with no live opencode leg starts at codex and the run is flagged before any implementation
-work is spent. No marker present (standalone `/review-task`) → the gate probes for itself.
+the live-leg list to `$REPO/.dev-loop/bridge-ok` — one per line, in chain order: the OpenAI leg
+when the probe answers, plus `github-copilot/gpt-5.6-sol` where `opencode models` lists it — so
+per-task gates skip dead legs instead of rediscovering them mid-failure. Probe fails → the chain
+starts at codex and the run is flagged before any implementation work is spent. No marker present
+(standalone `/review-task`) → the gate probes for itself.
 
 **Concurrency law: never two headless opencode runs at once on a machine.** 2026-07-06 work-laptop
 incident: stage 5 fanned out gates for two sibling repos in parallel; both wedged (suspected
@@ -124,9 +120,9 @@ never write anything; healthy runs emit events in ~5s) — kill at 60s, count th
 EVERY attempt including the first (2026-07-07: attempt 1 burned its full 480s because the kill
 was applied only to the retry).
 
-**The machine boundary is still the only work/personal guard** — never run a personal repo through
-the work laptop's gate (the copilot legs there ride the org seat); a personal machine's whole chain rides
-your own ChatGPT quota by construction. `Bridge-mode:` stamps in older plans are ignored.
+The chain rides whatever provider logins the current machine's opencode has authed — OpenAI as the
+primary leg, plus the copilot leg where a seat is present. `Bridge-mode:` stamps in older plans are
+ignored.
 
 ## Cross-model gate timing — per-task vs batched (leaf deferral)
 
@@ -166,17 +162,15 @@ API design, copy. **Cost is per-harness, not universal** — it reflects what YO
 | fable-5 | 9 | 9 | NOT plan-included as of 2026-07-07 — API/extra-usage only; never auto-spawn | expensive |
 | opus-4.8 | 7 | 8 | mid | mid |
 | sonnet-5 | 5 | 7 | cheap | cheap |
-| gpt-5.5 | 8 | 5 | ~free (opencode/codex ChatGPT OAuth) | sub-priced via ChatGPT OAuth; API otherwise |
-| gpt-5.6-sol | 8+ | 5 | copilot leg ONLY (ChatGPT OAuth rejects it) — metered premium requests | API otherwise |
+| gpt-5.6-sol | 8+ | 5 | ~free on the openai/codex ChatGPT-OAuth legs; metered premium on the copilot-seat leg | sub-priced via ChatGPT OAuth; API otherwise |
 | OSS (deepseek-v4, glm-5.x, qwen) | test-driving | test-driving | n/a | cheapest — opencode gateway/OpenRouter/local |
 
-**Cross-model reviewer pin — preferred `github-copilot/gpt-5.6-sol`, fallback `openai/gpt-5.5`;
-run it at DEFAULT variant.** (2026-07-09) Sol is served ONLY by a Copilot seat that lists it
-(`opencode models | grep -qx 'github-copilot/gpt-5.6-sol'`); ChatGPT OAuth rejects it, so there
-is no openai or codex sol leg, and its copilot requests are metered premium. Where that leg is
-live, every gate (per-task, integration, plan-gate) runs sol first; anywhere else — and when the
-sol leg dies after the standard retry — the gate falls back to the `openai/gpt-5.5` chain,
-recording the model that actually produced the verdict. Down-tiering below 5.5
+**Cross-model reviewer pin — `openai/gpt-5.6-sol`, at DEFAULT variant.** (2026-07-12) Sol is
+served directly through opencode's OpenAI auth (`opencode models | grep -qx
+'openai/gpt-5.6-sol'`), so every gate (per-task, integration, plan-gate) starts there. If the
+openai leg dies after the standard retry, fall to `github-copilot/gpt-5.6-sol` where that leg is
+live (separate seat quota — the OpenAI-quota-exhaustion escape), then the codex harness, recording
+the leg that produced the verdict. Down-tiering
 to gpt-5.4 buys negative speed and worse calibration (2026-07-03: gpt-5.4 = 5m55s, 2× slower AND
 over-escalated a Minor to a blocking Important). But **reasoning variant is a separate axis, and
 `--variant high` is banned.** Re-benchmark 2026-07-05 (real 413-line gate diff, `opencode run
@@ -184,7 +178,7 @@ over-escalated a Minor to a blocking Important). But **reasoning variant is a se
 returned** (opencode doesn't stream thinking, so long silent reasoning == indistinguishable from a
 hung process — this was the "15-min hang" that made the gate unusable and would kill adoption).
 **Default variant: first byte 2s, done 86s, verdict PASS, calibration intact** (caught a real
-untested-branch Minor); `minimal` ~88s but shallower. So the gate model (sol, or the 5.5 fallback)
+untested-branch Minor); `minimal` ~88s but shallower. So the opencode gate model
 runs at default variant + a 300s (plan-gate 480s) fail-fast timeout + the static-review preamble
 (no test re-runs).
 The 2026-07-03 numbers were all `--variant high`; treat them as model-vs-model only, not variant
