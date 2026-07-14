@@ -148,7 +148,11 @@ Mechanics per harness:
     < /dev/null > .dev-loop/impl-taskN.ndjson 2>.dev-loop/impl-taskN.err
   jq -r 'select(.type=="text") | .part.text' .dev-loop/impl-taskN.ndjson
   ```
-  600s cap (implementation > review; the 60s zero-byte kill still bounds a wedge). No
+  600s cap (implementation > review). **Liveness window 120s for THIS leg, not 60s** —
+  2026-07-13 task-2 lesson: grok's first byte on a large implementer prompt can exceed 60s
+  (long pre-output reasoning), and the 60s kill shot the `timeout` wrapper while the orphaned
+  opencode child ran on to finish. Gate legs keep 60s. And kill the **process group**
+  (`setsid` + `kill -- -$PID`), not just the wrapper, so a real wedge leaves no orphan. No
   IMPLEMENT RESULT block in the text, or missing/empty diff → count the attempt, retry once
   verbatim, then fall back to the sonnet subagent (the standing default below). Record which
   leg implemented each task (`impl: grok | sonnet`) next to its cycle-cause line.
