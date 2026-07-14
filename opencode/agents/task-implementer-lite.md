@@ -4,7 +4,11 @@ mode: subagent
 # The budget pin. Swap to test-drive OSS / other labs (e.g. opencode/deepseek-v4-pro,
 # opencode/glm-5.2) — cycle-cause telemetry is the scorecard, see
 # ~/.config/opencode/dev-loop/reference/model-policy.md.
-model: opencode/claude-sonnet-5
+# TEMP 2026-07-13 grok-4.5 implementer trial: deplete the X Premium included weekly xai
+# quota first; on quota exhaustion / repeated leg failure repin to opencode/claude-sonnet-5
+# (the standing default, kept on the next line for the flip-back).
+model: xai/grok-4.5
+# model: opencode/claude-sonnet-5
 ---
 
 # task-implementer-lite — budget tier, same contract

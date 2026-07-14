@@ -40,7 +40,7 @@ Untagged tasks (plans written before this policy) = `M`.
 | Role | Tier | Mechanics |
 |---|---|---|
 | Driver / main loop | session model | whatever you launched with |
-| Implementer, `[S]`/`[M]` task | **budget** | Claude Code: spawn implementer subagent with `model: sonnet` · opencode: `task-implementer-lite` |
+| Implementer, `[S]`/`[M]` task | **budget** | **TEMP 2026-07-13 grok trial (§ Implementer trial):** grok-4.5 first, sonnet fallback. Claude Code: grok bridge leg → `model: sonnet` subagent · opencode: `task-implementer-lite` (pinned `xai/grok-4.5`) |
 | Implementer, `[L]` task | session model | Claude Code: omit `model` (inherit) · opencode: `task-implementer` |
 | Fix cycles | per rule 4 | escalate on `design`/`semantics` cause |
 | Gate reviewers (both halves) | **strong — never below session** | Claude Code: inherit + GPT via the bridge chain (`openai/gpt-5.6-sol`, copilot-sol fallback where served, then codex; **default variant — never `--variant high`**; transport per § Bridge chain) · opencode: `task-reviewer` (inherits) + `task-reviewer-cross` (pinned) |
@@ -124,6 +124,35 @@ The chain rides whatever provider logins the current machine's opencode has auth
 primary leg, plus the copilot leg where a seat is present. `Bridge-mode:` stamps in older plans are
 ignored.
 
+## Implementer trial — grok-4.5 first, sonnet fallback (TEMP, 2026-07-13)
+
+Budget (`[S]`/`[M]`) implementation runs `xai/grok-4.5` first to **deplete the X Premium
+included weekly xai quota**, exactly like leg 1 of the gate chain depletes the ChatGPT pool.
+Sonnet-5 is the fallback, not the peer: fall back on quota exhaustion (429 / quota error in
+stderr), or after the standard dead-leg sequence (timeout → one verbatim retry → second
+timeout/failure). Scorecard: cycle-cause telemetry per the test-driving protocol — grok keeps
+the seat if it holds `cycles=0`-ish across a feature; repeated `design`/`semantics` causes
+end the trial. Revert = flip the pin back in `task-implementer-lite.md` + restore the
+implementer row above. **Gate/verification chain is untouched — grok is generation-side only.**
+
+Mechanics per harness:
+- **opencode:** `task-implementer-lite` is pinned `xai/grok-4.5` (sonnet pin kept commented
+  for the flip-back).
+- **Claude Code (the orchestrator's S/M leg):** the Agent tool can't spawn xai models, so the
+  grok leg rides the bridge transport, all standing laws apply (stdin `< /dev/null`,
+  `--format json` + jq text extraction, liveness kill at 60s/0 bytes, serialize opencode runs
+  per machine — never concurrent with a gate leg):
+  ```bash
+  timeout 600 opencode run --dir "$WORKTREE" -m xai/grok-4.5 --format json \
+    "<the full implementer brief, rubric inlined, ending: finish with the IMPLEMENT RESULT block>" \
+    < /dev/null > .dev-loop/impl-taskN.ndjson 2>.dev-loop/impl-taskN.err
+  jq -r 'select(.type=="text") | .part.text' .dev-loop/impl-taskN.ndjson
+  ```
+  600s cap (implementation > review; the 60s zero-byte kill still bounds a wedge). No
+  IMPLEMENT RESULT block in the text, or missing/empty diff → count the attempt, retry once
+  verbatim, then fall back to the sonnet subagent (the standing default below). Record which
+  leg implemented each task (`impl: grok | sonnet`) next to its cycle-cause line.
+
 ## Cross-model gate timing — per-task vs batched (leaf deferral)
 
 The cross-model reviewer (Reviewer B / `task-reviewer-cross`) is the run's highest-value gate —
@@ -163,6 +192,7 @@ API design, copy. **Cost is per-harness, not universal** — it reflects what YO
 | opus-4.8 | 7 | 8 | mid | mid |
 | sonnet-5 | 5 | 7 | cheap | cheap |
 | gpt-5.6-sol | 8+ | 5 | ~free on the openai/codex ChatGPT-OAuth legs; metered premium on the copilot-seat leg | sub-priced via ChatGPT OAuth; API otherwise |
+| grok-4.5 | ~7 (provisional — 2026-07-13 gate replay: parity with sol, 1.7× faster; implementer trial running) | untested | n/a (no xai in Agent tool — rides the bridge) | X Premium included weekly quota, then $2/$6 metered |
 | OSS (deepseek-v4, glm-5.x, qwen) | test-driving | test-driving | n/a | cheapest — opencode gateway/OpenRouter/local |
 
 **Cross-model reviewer pin — `openai/gpt-5.6-sol`, at DEFAULT variant.** (2026-07-12) Sol is
