@@ -40,7 +40,7 @@ Untagged tasks (plans written before this policy) = `M`.
 | Role | Tier | Mechanics |
 |---|---|---|
 | Driver / main loop | session model | whatever you launched with |
-| Implementer, `[S]`/`[M]` task | **budget** | **TEMP 2026-07-13 grok trial (§ Implementer trial):** grok-4.5 first, sonnet fallback. Claude Code: grok bridge leg → `model: sonnet` subagent · opencode: `task-implementer-lite` (pinned `xai/grok-4.5`) |
+| Implementer, `[S]`/`[M]` task | **budget** | grok-4.5 first, sonnet fallback (§ Budget implementer chain). Claude Code: grok bridge leg → `model: sonnet` subagent · opencode: `task-implementer-lite` (pinned `xai/grok-4.5`) |
 | Implementer, `[L]` task | session model | Claude Code: omit `model` (inherit) · opencode: `task-implementer` |
 | Fix cycles | per rule 4 | escalate on `design`/`semantics` cause |
 | Gate reviewers (both halves) | **strong — never below session** | Claude Code: inherit + GPT via the bridge chain (`openai/gpt-5.6-sol`, copilot-sol fallback where served, then codex; **default variant — never `--variant high`**; transport per § Bridge chain) · opencode: `task-reviewer` (inherits) + `task-reviewer-cross` (pinned) |
@@ -124,16 +124,26 @@ The chain rides whatever provider logins the current machine's opencode has auth
 primary leg, plus the copilot leg where a seat is present. `Bridge-mode:` stamps in older plans are
 ignored.
 
-## Implementer trial — grok-4.5 first, sonnet fallback (TEMP, 2026-07-13)
+## Budget implementer chain — grok-4.5 first, sonnet fallback (locked 2026-07-14)
 
 Budget (`[S]`/`[M]`) implementation runs `xai/grok-4.5` first to **deplete the X Premium
 included weekly xai quota**, exactly like leg 1 of the gate chain depletes the ChatGPT pool.
 Sonnet-5 is the fallback, not the peer: fall back on quota exhaustion (429 / quota error in
 stderr), or after the standard dead-leg sequence (timeout → one verbatim retry → second
-timeout/failure). Scorecard: cycle-cause telemetry per the test-driving protocol — grok keeps
-the seat if it holds `cycles=0`-ish across a feature; repeated `design`/`semantics` causes
-end the trial. Revert = flip the pin back in `task-implementer-lite.md` + restore the
-implementer row above. **Gate/verification chain is untouched — grok is generation-side only.**
+timeout/failure). Seat earned in the 2026-07-13 trial (clippy-ai cost-attribution feature:
+5/5 tasks, $0.85 total, quality held under the locked gate). Standing conditions, permanent:
+
+- **Generation-side ONLY — grok is permanently disqualified from gate/verification/review
+  roles.** Trial evidence: it claimed `verify: PASS` with zero tool events in its transcript
+  (the confident-wrong pattern its hallucination benchmarks predict). Corollary: **never
+  trust a grok self-report** — the orchestrator always re-verifies by execution, which is
+  the standing contract anyway. The gate chain is untouched by this section.
+- **Demotion trigger (per feature):** two `design`/`semantics` cycle-causes attributable to
+  grok within one feature → repin the remainder of that feature to sonnet and say so in the
+  run summary. Counts reset per feature. Keep adjudicating attribution honestly — a defect
+  pinned verbatim in the brief is the brief's strike, not the model's.
+- Revert entirely = flip the pin back in `task-implementer-lite.md` + restore the
+  implementer row above (one line each).
 
 Mechanics per harness:
 - **opencode:** `task-implementer-lite` is pinned `xai/grok-4.5` (sonnet pin kept commented
@@ -196,7 +206,7 @@ API design, copy. **Cost is per-harness, not universal** — it reflects what YO
 | opus-4.8 | 7 | 8 | mid | mid |
 | sonnet-5 | 5 | 7 | cheap | cheap |
 | gpt-5.6-sol | 8+ | 5 | ~free on the openai/codex ChatGPT-OAuth legs; metered premium on the copilot-seat leg | sub-priced via ChatGPT OAuth; API otherwise |
-| grok-4.5 | ~7 (provisional — 2026-07-13 gate replay: parity with sol, 1.7× faster; implementer trial running) | untested | n/a (no xai in Agent tool — rides the bridge) | X Premium included weekly quota, then $2/$6 metered |
+| grok-4.5 | 7 as implementer (2026-07-13 trial: 5/5 tasks/$0.85; gate replay parity with sol, 1.7× faster) — **banned from gate/verify roles: faked a verify claim** | untested | n/a (no xai in Agent tool — rides the bridge) | X Premium included weekly quota, then $2/$6 metered |
 | OSS (deepseek-v4, glm-5.x, qwen) | test-driving | test-driving | n/a | cheapest — opencode gateway/OpenRouter/local |
 
 **Cross-model reviewer pin — `openai/gpt-5.6-sol`, at DEFAULT variant.** (2026-07-12) Sol is

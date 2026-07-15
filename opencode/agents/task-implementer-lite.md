@@ -3,10 +3,10 @@ description: Budget-tier variant of task-implementer for [S]/[M] tasks — same 
 mode: subagent
 # The budget pin. Swap to test-drive OSS / other labs (e.g. opencode/deepseek-v4-pro,
 # opencode/glm-5.2) — cycle-cause telemetry is the scorecard, see
-# ~/.config/opencode/dev-loop/reference/model-policy.md.
-# TEMP 2026-07-13 grok-4.5 implementer trial: deplete the X Premium included weekly xai
-# quota first; on quota exhaustion / repeated leg failure repin to opencode/claude-sonnet-5
-# (the standing default, kept on the next line for the flip-back).
+# ~/.config/opencode/dev-loop/reference/model-policy.md § Budget implementer chain.
+# grok-4.5 (locked 2026-07-14, seat earned in the 2026-07-13 trial): depletes the X Premium
+# included weekly xai quota first; on quota exhaustion / dead-leg sequence / 2 same-feature
+# design|semantics strikes, repin to opencode/claude-sonnet-5 (the fallback, next line).
 model: xai/grok-4.5
 # model: opencode/claude-sonnet-5
 ---
