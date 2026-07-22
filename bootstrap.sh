@@ -32,6 +32,9 @@ link templates/progress.md         templates/progress.md
 # --- companion skills ---------------------------------------------------------------
 link skills/flow-report            skills/flow-report
 
+# --- standalone commands ------------------------------------------------------------
+link commands/cleanup-slop.md      commands/cleanup-slop.md
+
 # --- helper CLIs (into ~/.local/bin, not ~/.claude) ----------------------------------
 mkdir -p "$HOME/.local/bin"
 ln -sfn "$REPO/bin/keepawake" "$HOME/.local/bin/keepawake"
